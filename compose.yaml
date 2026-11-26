@@ -1,0 +1,32 @@
+services:
+  search:
+    build: .
+    ports:
+      - "127.0.0.1:8183:8000"
+    environment:
+      SEARCH_MANAGER: "off"
+    command:
+      - sh
+      - -ec
+      - |
+        cp /catalog/catalog.sqlite /tmp/catalog.sqlite
+        exec python app.py --snapshot-cache --host 0.0.0.0 --db /tmp/catalog.sqlite --events /events/events.sqlite
+    volumes:
+      - type: bind
+        source: ./data/catalog.sqlite
+        target: /catalog/catalog.sqlite
+        read_only: true
+        bind:
+          create_host_path: false
+      - events:/events
+    read_only: true
+    tmpfs:
+      - /tmp:size=384m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1536m
+    cpus: 2.0
+volumes:
+  events:
