@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Поиск по каталогу Softline с подбором лицензий и проверенными допродажами.">
+<meta name="theme-color" content="#172923">
+<title>Search2Revenue AI · Поиск по каталогу Softline</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">Search2Revenue AI</a>
+  <nav class="toolbar" aria-label="Разделы">
+    <button id="theme-toggle" type="button" aria-pressed="false">Тёмная тема</button>
+    <button id="analytics-toggle" type="button" aria-controls="analytics" aria-expanded="false">Аналитика</button>
+  </nav>
+</header>
+<main>
+<section class="hero">
+<div class="hero-heading">
+  <h1>Поиск по каталогу</h1>
+  <img class="partner-logo" src="softline-logo.svg" width="108" height="27" alt="Softline">
+</div>
+<p class="search-caption">Введите название, артикул или условия покупки.</p>
+<form id="search">
+<label class="sr-only" for="query">Запрос по каталогу</label>
+<input id="query" type="search" maxlength="240" required autocomplete="off" list="suggestions" placeholder="Например, сервер">
+<datalist id="suggestions"></datalist>
+<button type="submit" id="submit">Найти</button>
+</form>
+<div id="companion-preview" class="companion-preview" aria-live="polite" hidden></div>
+</section>
+<div id="workspace" class="workspace" data-layout="columns">
+<aside class="search-options" aria-labelledby="options-title">
+<h2 id="options-title">Параметры поиска</h2>
+<label class="buyer-context" for="buyer-context">Демо-профиль
+<select id="buyer-context">
+<option value="">Без профиля</option>
+<option value="windows-office">Офис на Windows 11</option>
+<option value="windows-server">ИТ-отдел с Windows Server 2019 Standard (x64)</option>
+</select></label>
+<div class="examples" aria-label="Примеры запросов">
+<button type="button" data-query="Касперского расширенного продлить на 300 компов">Продление на 300 ПК</button>
+<button type="button" data-query="1С Автотранспорт Проф на 20 мест без USB">1С на 20 мест без USB</button>
+<button type="button" data-query="Astra Linux и защита рабочих мест">Astra Linux и защита</button>
+</div>
+<button class="layout-toggle" id="layout-toggle" type="button" aria-pressed="false">Результаты списком</button>
+</aside>
+<section id="results" aria-label="Результаты поиска">
+<div class="section-head"><h2>Товары</h2><p id="status" role="status" aria-live="polite">Введите запрос или выберите пример.</p></div>
+<div id="notice"></div><div id="products" class="cards"></div>
+</section>
+<aside id="extras" aria-label="Проверенные допродажи" hidden><h2>Проверенные допродажи</h2><div id="recommendations" class="cards"></div></aside>
+</div>
+<section id="analytics" aria-labelledby="analytics-title" hidden><h2 id="analytics-title">Аналитика поиска</h2><div id="stats"></div>
+<div id="analytics-manager" hidden>
+<div class="section-head"><h3>Неудачные запросы</h3><button id="analytics-refresh" type="button">Обновить</button></div>
+<ul id="issue-list" class="issue-list"></ul>
+<h3>Предложения по улучшению</h3>
+<p id="manager-status" role="status"></p>
+<div id="proposal-list"></div>
+</div>
+</section>
+</main>
+</body>
+</html>
