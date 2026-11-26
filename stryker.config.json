@@ -1,0 +1,24 @@
+{
+    "mutate":  [
+                   "web/app.js"
+               ],
+    "ignorePatterns":  [
+                           "**",
+                           "!web/app.js",
+                           "!tests/frontend.test.cjs"
+                       ],
+    "testRunner":  "command",
+    "commandRunner":  {
+                          "command":  "node --test tests/frontend.test.cjs"
+                      },
+    "coverageAnalysis":  "off",
+    "reporters":  [
+                      "progress",
+                      "json"
+                  ],
+    "jsonReporter":  {
+                         "fileName":  "artifacts/qa/stryker.json"
+                     },
+    "tempDirName":  "artifacts/qa/stryker-tmp",
+    "concurrency":  3
+}
