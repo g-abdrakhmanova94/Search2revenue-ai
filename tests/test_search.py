@@ -1030,6 +1030,26 @@ class SearchTest(unittest.TestCase):
                     server.shutdown()
                     worker.join()
 
+    def test_head_checks_the_stand_without_a_response_body_or_search_event(self):
+        service = self.make_service(offer("1", "Инструмент", "21", "TOOL"))
+        with ThreadingHTTPServer(("127.0.0.1", 0), handler(service)) as server:
+            worker = Thread(target=server.serve_forever, daemon=True)
+            worker.start()
+            try:
+                for path in ("/", "/health", "/app.js"):
+                    with closing(
+                        HTTPConnection(*server.server_address, timeout=4)
+                    ) as client:
+                        client.request("HEAD", path)
+                        response = client.getresponse()
+                        self.assertEqual(response.status, 200)
+                        self.assertGreater(int(response.getheader("Content-Length")), 0)
+                        self.assertEqual(response.read(), b"")
+                self.assertEqual(service.analytics()["events"], 0)
+            finally:
+                server.shutdown()
+                worker.join()
+
 
 class WorkbookSecurityTest(unittest.TestCase):
     def test_benchmark_ignores_multi_letter_columns(self):

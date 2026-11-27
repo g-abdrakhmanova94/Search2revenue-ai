@@ -365,7 +365,8 @@ class SearchHandler(BaseHTTPRequestHandler):
             "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
         )
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     def json(self, data: dict, code: int = 200) -> None:
         self.send(
@@ -417,6 +418,13 @@ class SearchHandler(BaseHTTPRequestHandler):
             self.json({"approved": True})
         else:
             self.json({"error": "Предложение уже обработано или устарело"}, 409)
+
+    def do_HEAD(self) -> None:
+        path = urlsplit(self.path).path
+        if path in STATIC or path == "/health":
+            self.do_GET()
+            return
+        self.send_error(405)
 
     def do_GET(self) -> None:
         url = urlsplit(self.path)
