@@ -18,6 +18,26 @@ NAS = "Сетевое хранилище QNAP 2 disks TS-233"
 SOLO = "AnyDesk (лицензия на 1 год), Solo"
 SCANNER = "НПО «Эшелон» Сканер-ВС 7, Основная лицензия"
 ASTRA = "Astra Linux Special Edition 1.8"
+ALT = "BaseALT Альт СП Рабочая станция, релиз 10"
+WIN11 = "Microsoft Windows 11 Pro FQC-10572"
+CSP_WORKPLACE = "КриптоПро CSP 5.0: годовая лицензия на 1 рабочее место"
+CSP_SERVER = "КриптоПро CSP 5.0: серверная лицензия СКЗИ"
+CSP_TIMESTAMP = "Лицензия на право использования ПО КриптоПро TSP Client"
+CSP_HARDWARE = "Актив «Рутокен ЭЦП Flash», Rutoken (без упаковки), 2.0"
+CSP_COMPANIONS = (
+    "Актив «Рутокен Lite», Rutoken (без упаковки), 1010",
+    CSP_TIMESTAMP,
+    CSP_HARDWARE,
+)
+MAXPATROL = "Positive Technologies MaxPatrol Endpoint Protection Platform"
+ENDPOINT_ALTERNATIVE = (
+    "Kaspersky Endpoint Security для бизнеса Стандартный базовая лицензия"
+)
+MTS_LINK = (
+    "МТС Линк (Webinar Group) МТС Линк Стандарт",
+    "МТС Линк (Webinar Group) МТС Линк Про",
+    "МТС Линк (Webinar Group) МТС Линк Optimum 30",
+)
 
 
 @dataclass(frozen=True)
@@ -44,13 +64,54 @@ CASES = (
         companions=(BACKUP,),
     ),
     Case("Kaspersky Small Office Security для Mac"),
-    Case("лицензия Сканер-ВС 7", direct=(SCANNER,), companions=(ASTRA,)),
+    Case("лицензия Сканер-ВС 7", direct=(SCANNER,), companions=(ASTRA, ALT, WIN11)),
+    Case("Сканер-ВС 7 для российской ОС", direct=(SCANNER,), companions=(ASTRA, ALT)),
     Case("Сканер-ВС для Windows", "windows-office", direct=(SCANNER,)),
     Case(
         "AnyDesk Advanced для Windows",
         "windows-office",
         direct=("AnyDesk (лицензия на 1 год), Advanced",),
         companions=(KSOS, BACKUP),
+    ),
+    Case("AnyDesk", direct=(SOLO,), companions=(KSOS, BACKUP, WIN11)),
+    Case("AnyDesk без ОС", direct=(SOLO,), companions=(KSOS, BACKUP)),
+    Case(
+        "AnyDesk для Windows 11",
+        direct=(SOLO,),
+        companions=(KSOS, BACKUP),
+    ),
+    Case(
+        "AnyDesk и резервное копирование на NAS",
+        direct=(SOLO,),
+        companions=(BACKUP, NAS),
+    ),
+    Case(
+        "AnyDesk и резервное копирование без NAS",
+        direct=(SOLO,),
+        companions=(BACKUP,),
+    ),
+    Case("AnyDesk для macOS и резервное копирование на NAS"),
+    Case(
+        "КриптоПро CSP 5.0 для рабочего места",
+        direct=(CSP_WORKPLACE,),
+        companions=CSP_COMPANIONS,
+    ),
+    Case(
+        "КриптоПро CSP 5.0",
+        "windows-server",
+        direct=(CSP_SERVER,),
+        companions=CSP_COMPANIONS,
+    ),
+    Case("КриптоПро CSP 5.0 для macOS", direct=(CSP_WORKPLACE,)),
+    Case(
+        "КриптоПро CSP 5.0 с неизвлекаемым ключом",
+        direct=(CSP_WORKPLACE,),
+        companions=(CSP_HARDWARE, CSP_TIMESTAMP),
+    ),
+    Case(
+        "КриптоПро CSP 5.0 без токена",
+        direct=(CSP_WORKPLACE,),
+        companions=(CSP_TIMESTAMP,),
     ),
     Case(
         "Microsoft 365 не семейная",
@@ -65,6 +126,19 @@ CASES = (
         alternatives=("Microsoft Office для дома и бизнеса 2024",),
     ),
     Case("Microsoft Office 2021 для дома и бизнеса для Linux"),
+    Case("max patrol", direct=(MAXPATROL,)),
+    Case("MaxPatrol EPP продление", direct=(MAXPATROL,)),
+    Case("MaxPatrol SIEM"),
+    Case("MaxPatrol VM"),
+    Case(
+        "MaxPatrol EPP новая лицензия на 150 ПК для Windows 11",
+        alternatives=(ENDPOINT_ALTERNATIVE,),
+    ),
+    Case("MaxPatrol EPP новая лицензия на 500 ПК для Windows 11"),
+    Case("MaxPatrol EPP новая лицензия на 150 ПК для macOS"),
+    Case("мтс", direct=MTS_LINK, companions=("Гарнитура Logitech H540",)),
+    Case("МТС Линк без гарнитуры", direct=MTS_LINK),
+    Case("МТС Линк только лицензия", direct=MTS_LINK),
 )
 
 

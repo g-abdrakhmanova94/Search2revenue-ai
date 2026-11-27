@@ -227,6 +227,8 @@ def matches_purchase_prerequisite(query: str, title: str) -> bool:
 
 
 def matches_specialized_license(query: str, terms: set[str], title: str) -> bool:
+    if {"мтс", "webinar"} <= terms:
+        return "мтс линк" in title
     if "maxpatrol" in terms:
         named = set(words(title))
         if "maxpatrol" not in named:

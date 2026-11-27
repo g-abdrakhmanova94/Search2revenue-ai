@@ -39,6 +39,7 @@ SCANNER_SOURCE = "https://scaner-vs.ru/wp-content/uploads/2025/06/%D0%98%D0%BD%D
 SCANNER_PLATFORMS = "https://etecs.ru/getscanervs/"
 ALT_RELEASE_SOURCE = "https://cve.basealt.ru/report-24032025-c10f2-c10f1-special.html"
 SCANNER_WSL_SOURCE = "https://docs.etecs.ru/scanner/docs/7.0/getting-started/installation/windows-wsl-install/"
+MTS_LINK_HARDWARE_SOURCE = "https://help.mts-link.ru/article/19765"
 RUTOKEN_SOURCE = "https://dev.rutoken.ru/pages/viewpage.action?pageId=2228237"
 RUTOKEN_ACTIVE_SOURCE = (
     "https://developer.rutoken.ru/pages/viewpage.action?pageId=86048961"
@@ -390,6 +391,15 @@ REMOTE_WORKSTATION_OS = CompanionOffer(
     ANYDESK_SOURCE,
     "Windows 11 входит в список поддерживаемых ОС AnyDesk.",
 )
+WEBINAR_HEADSET = CompanionOffer(
+    "webinar-audio",
+    "logitech h540",
+    "Гарнитура Logitech H540, цвет черный",
+    "%USB 2.0%",
+    "USB-гарнитура для ведущего вебинара, если нужна отдельная гарнитура с микрофоном.",
+    MTS_LINK_HARDWARE_SOURCE,
+    "МТС Линк указывает Logitech H540 в списке рекомендуемого оборудования для вебинаров.",
+)
 SIGNATURE_TOKEN = CompanionOffer(
     "key",
     "рутокен lite",
@@ -649,6 +659,17 @@ def compatible_infrastructure_items(
 def specialized_offers(
     primary: dict, query: str, context: str, requested: str
 ) -> tuple[tuple[CompanionOffer, ...], dict[str, str]] | None:
+    title = normalize(primary["name"])
+    if title.startswith("мтс линк (webinar group)") and not (
+        requested
+        or re.search(
+            r"\b(?:без\s+(?:гарнитур\w*|микрофон\w*|оборудован\w*|usb|юсб)|только\s+лицензи\w*|android|ios|смартфон\w*)\b",
+            normalize(query),
+        )
+    ):
+        return (WEBINAR_HEADSET,), catalog_evidence(
+            "name", primary["name"], primary["url"]
+        )
     scanner_evidence = scanner_primary_evidence(primary, query, context, requested)
     if scanner_evidence:
         offers = [SCANNER_OS]
