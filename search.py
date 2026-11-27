@@ -461,6 +461,20 @@ def catalog_evidence(field: str, value: str, url: str) -> dict[str, str]:
     return {"kind": "feed", "field": field, "value": value, "url": url}
 
 
+SAMSUNG_T7_MANUAL = "https://download.semiconductor.samsung.com/resources/user-manual/samsung_portable_ssd_t7_user_manual_english_10129591064199.pdf"
+
+
+def catalog_identity(row: sqlite3.Row) -> tuple[str, str]:
+    if (
+        (row["code"] or "").upper() == "MU-PC1T0H/WW"
+        and normalize(row["vendor"]) == "samsung"
+        and "samsung t7" in normalize(row["name"])
+        and {"ssd", "usb"} <= set(words(row["description"]))
+    ):
+        return "Внешний SSD Samsung T7 1 ТБ", "Внешние SSD"
+    return row["name"], row["category"]
+
+
 def purchase_priority(row: sqlite3.Row) -> int:
     price = row["price"]
     return 0 if row["available"] and price is not None and price > 0 else 1
@@ -813,14 +827,32 @@ class SearchEngine:
         constraints: dict | None = None,
     ) -> dict:
         path = urlsplit(row["url"]).path.lower().rstrip("/")
+        name, category = catalog_identity(row)
+        evidence = (
+            license_evidence(row, confirmed, constraints)
+            if confirmed and constraints
+            else []
+        )
+        if name != row["name"]:
+            evidence.extend(
+                (
+                    catalog_evidence("name", row["name"], row["url"]),
+                    {
+                        "kind": "vendor",
+                        "field": "Samsung Portable SSD T7 · MU-PC1T0",
+                        "value": "SSD, 1 ТБ, USB 3.2 Gen 2",
+                        "url": SAMSUNG_T7_MANUAL,
+                    },
+                )
+            )
         return {
             "sku": row["sku"],
             "group": row["group_id"],
             "code": row["code"],
-            "name": row["name"],
+            "name": name,
             "vendor": row["vendor"],
             "url": row["url"],
-            "category": row["category"],
+            "category": category,
             "category_id": row["category_id"],
             "available": bool(row["available"]),
             "price": row["price"],
@@ -830,9 +862,7 @@ class SearchEngine:
             "platform": platform_text(row["description"]),
             "confirmed": confirmed,
             "unknown": unknown,
-            "evidence": license_evidence(row, confirmed, constraints)
-            if confirmed and constraints
-            else [],
+            "evidence": evidence,
             "family_url": "/".join(path.split("/")[:3])
             if path.count("/") >= 3
             else path,
@@ -985,7 +1015,8 @@ class SearchEngine:
         has_constraints = any(constraints.values())
         pc_quantity = bool(re.search(r"\b\d+\s*(?:пк|комп\w*)\b", normalize(clean)))
         for row in rows:
-            title = normalize(row["name"])
+            name, category_label = catalog_identity(row)
+            title = normalize(name)
             title_tokens = words(title)
             title_terms = set(title_tokens)
             title_head = re.split(
@@ -995,11 +1026,17 @@ class SearchEngine:
             identity_terms = set(words(row["vendor"] + " " + row["code"]))
             vendor_path = urlsplit(row["url"]).path.split("/")[1]
             website_vendor = set(words(vendor_path))
-            category = normalize(row["category"])
+            category = normalize(category_label)
             category_terms = set(words(category))
             if not matches_specialized_license(normalized_query, query_terms, title):
                 continue
             if not fits_product_role(role, row, title, category, office_years):
+                continue
+            if (
+                role == "external_ssd"
+                and "usb" in query_terms
+                and "usb" not in words(f"{title} {row['description']}")
+            ):
                 continue
             if (
                 pc_quantity

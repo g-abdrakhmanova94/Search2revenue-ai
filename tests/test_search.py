@@ -27,6 +27,7 @@ FEED = """<?xml version="1.0" encoding="utf-8"?>
 <category id="23">Программы для работы с базами данных</category>
 <category id="24">Офисное ПО</category>
 <category id="1033">Программное обеспечение для резервного копирования</category>
+<category id="1004">Внешние HDD</category>
 </categories><offers>{}</offers></shop></yml_catalog>"""
 
 
@@ -41,10 +42,11 @@ def offer(
     vendor_path="test",
     group=None,
     price=1200,
+    vendor="Test",
 ):
     group_attr = f' group_id="{group}"' if group else ""
     return (
-        f'<offer id="{sku}" available="{available}"{group_attr}><name>{title}</name><vendor>Test</vendor>'
+        f'<offer id="{sku}" available="{available}"{group_attr}><name>{title}</name><vendor>{vendor}</vendor>'
         f"<categoryId>{category}</categoryId><vendorCode>{code}</vendorCode>"
         f"<url>https://store.softline.ru/{vendor_path}/{sku}/</url><description>{description}</description>"
         f"<price>{price}</price>{extra}</offer>"
@@ -654,6 +656,33 @@ class SearchTest(unittest.TestCase):
     def test_generic_server_means_equipment(self):
         self.assertEqual(
             [x["code"] for x in self.engine.search("сервак")["items"]], ["RACK"]
+        )
+
+    def test_external_ssd_accepts_vendor_verified_code_and_rejects_hdd(self):
+        service = self.make_service(
+            offer(
+                "501",
+                "Внешний HDD Samsung T7 1TB",
+                "1004",
+                "MU-PC1T0H/WW",
+                vendor="Samsung",
+                description="SSD, 1 ТБ, USB 3.2",
+            ),
+            offer("502", "Внешний HDD 2 ТБ", "1004", "HDD", description="USB 3.2"),
+            offer(
+                "503",
+                "Внешний HDD Samsung T7 2TB",
+                "1004",
+                "OTHER",
+                vendor="Samsung",
+                description="USB 3.2",
+            ),
+        )
+        items = service.search("Внешний SSD USB")["items"]
+        self.assertEqual([item["code"] for item in items], ["MU-PC1T0H/WW"])
+        self.assertEqual(items[0]["name"], "Внешний SSD Samsung T7 1 ТБ")
+        self.assertEqual(
+            [fact["kind"] for fact in items[0]["evidence"]], ["feed", "vendor"]
         )
 
     def test_branded_server_does_not_return_monitors_or_other_brands(self):
