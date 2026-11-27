@@ -11,6 +11,7 @@ from itertools import chain
 from search import (
     SearchEngine,
     catalog_evidence,
+    csp_scope,
     normalize,
     parse_intent,
     platform_text,
@@ -35,6 +36,9 @@ QNAP_SOURCE = "https://www.qnap.com/en-us/product/ts-233/specs/software?os=qts"
 HANDY_NAS_SOURCE = "https://www.handybackup.ru/backup-comparisons.shtml"
 SCANNER_SOURCE = "https://scaner-vs.ru/wp-content/uploads/2025/06/%D0%98%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%86%D0%B8%D1%8F-%D0%BF%D0%BE-%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B5-%D0%A1%D0%BA%D0%B0%D0%BD%D0%B5%D1%80-%D0%92%D0%A1-7.pdf"
 RUTOKEN_SOURCE = "https://dev.rutoken.ru/pages/viewpage.action?pageId=2228237"
+RUTOKEN_ACTIVE_SOURCE = (
+    "https://developer.rutoken.ru/pages/viewpage.action?pageId=86048961"
+)
 TSP_SOURCE = "https://www.cryptopro.ru/order/OrderForm.aspx?search=TSP+Client"
 ASTRA_VERSION = re.compile(r"(?<!\d)1\.\d+(?!\d)")
 X64 = re.compile(r"\b(?:[xх]86[-_– ]64|amd64|[xх]64)\b", re.IGNORECASE)
@@ -363,7 +367,7 @@ SIGNATURE_TOKEN = CompanionOffer(
     "рутокен lite",
     "Актив «Рутокен Lite», Rutoken (без упаковки), 1010",
     "%Платформа: Windows%Тип лицензии: полная версия%",
-    "Пассивный носитель ключевого контейнера. Подходит, если ключ нужно хранить на локальном USB-токене.",
+    "Пассивный носитель ключевого контейнера для Windows. Подходит, если нужен локальный USB-токен.",
     RUTOKEN_SOURCE,
 )
 SIGNATURE_TIMESTAMP = CompanionOffer(
@@ -371,8 +375,17 @@ SIGNATURE_TIMESTAMP = CompanionOffer(
     "tsp client",
     "Лицензия на право использования ПО КриптоПро TSP Client из состава СКЗИ КриптоПро CSP, версии 5.0%",
     "%Платформа: Windows%Тип лицензии: полная версия%Тип клиента: юрлицо%",
-    "Лицензия на узел, где подпись получает метку времени. Нужна только для форматов подписи с меткой времени.",
+    "Лицензия на узел Windows, где подпись получает метку времени. Нужна для форматов подписи с меткой времени.",
     TSP_SOURCE,
+)
+SIGNATURE_HARDWARE_TOKEN = CompanionOffer(
+    "hardware-key",
+    "рутокен эцп flash",
+    "Актив «Рутокен ЭЦП Flash», Rutoken (без упаковки), 2.0 128КБ 32ГБ, серт. ФСТЭК",
+    "%Платформа: Windows%Тип лицензии: полная версия%",
+    "Выберите этот носитель вместо Рутокен Lite, если закрытый ключ должен оставаться в памяти токена при подписании.",
+    RUTOKEN_ACTIVE_SOURCE,
+    "Рутокен ЭЦП 2.0 Flash поддерживает в КриптоПро CSP 5.0 режим ФКН без защиты канала.",
 )
 
 
@@ -412,9 +425,17 @@ def scanner_primary_evidence(
 def csp_offers(
     primary: dict, query: str, context: str, requested: str
 ) -> tuple[CompanionOffer, ...]:
+    title = normalize(primary["name"])
+    server = title == "криптопро csp 5.0: серверная лицензия скзи"
+    workplace = csp_scope(title) == "workplace" and title.startswith(
+        (
+            "криптопро csp 5.0: годовая лицензия",
+            "криптопро csp (бессрочная лицензия скзи",
+        )
+    )
     if (
         requested
-        or normalize(primary["name"]) != "криптопро csp 5.0: серверная лицензия скзи"
+        or not (server or workplace)
         or "windows" not in normalize(primary["platform"])
         or re.search(
             r"\b(?:linux|macos|mac|астра|линукс|arm64)\b", query, re.IGNORECASE
@@ -422,9 +443,22 @@ def csp_offers(
     ):
         return ()
     platforms = windows_platforms(query) or windows_platforms(PROFILES.get(context, ""))
-    if platforms and platforms - {"windows server 2016", "windows server 2019"}:
+    supported = (
+        {"windows server 2016", "windows server 2019"}
+        if server
+        else {
+            "windows 10",
+            "windows 11",
+        }
+    )
+    if platforms and platforms - supported:
         return ()
-    return SIGNATURE_TOKEN, SIGNATURE_TIMESTAMP
+    text = normalize(query)
+    if re.search(r"\b(?:без|не нужен|не нужно)\s+(?:usb|токен\w*|рутокен\w*)", text):
+        return (SIGNATURE_TIMESTAMP,)
+    if re.search(r"неизвлекаем\w*\s+ключ|аппаратн\w*\s+ключ|\bфкн\b", text):
+        return SIGNATURE_HARDWARE_TOKEN, SIGNATURE_TIMESTAMP
+    return SIGNATURE_TOKEN, SIGNATURE_TIMESTAMP, SIGNATURE_HARDWARE_TOKEN
 
 
 def workstation_purposes(requested: str, query: str) -> set[str]:
@@ -572,10 +606,11 @@ def specialized_offers(
         return (SCANNER_OS,), scanner_evidence
     signature_offers = csp_offers(primary, query, context, requested)
     if signature_offers:
+        server = csp_scope(normalize(primary["name"])) == "server"
         return signature_offers, {
             "kind": "vendor",
-            "field": "КриптоПро CSP 5.0 · Серверные ОС и носители",
-            "value": "Windows Server 2016/2019 x64, Рутокен Lite",
+            "field": "КриптоПро CSP 5.0 · поддерживаемые ОС",
+            "value": "Windows Server 2016/2019 x64" if server else "Windows 10/11",
             "url": CRYPTO_SOURCE,
         }
     return None

@@ -120,6 +120,9 @@ SUPPORT_LICENSE = re.compile(
 )
 CSP_VERSION_REQUEST = re.compile(r"\b(?:csp|цсп|верси[яи])\s+([45])(?:\.(\d+))?\b")
 CSP_VERSION_OFFER = re.compile(r"\bcsp\s+(?:версии\s+)?([45])\.(\d+)\b")
+CSP_WORKPLACE = re.compile(r"\bрабоч\w*\s+(?:мест\w*|станци\w*)\b")
+CSP_SERVER = re.compile(r"\b(?:сервер\w*|server)\b")
+CSP_NO_SERVER = re.compile(r"\b(?:без|не для)\s+(?:сервер\w*|server)\b")
 SCANNER_EXTRA_IP = re.compile(r"\b(?:дополнительн\w*\s+ip|additional ip)\b")
 ACADEMIC_AUDIENCE = re.compile(r"академ|образовательн|учебн|школ|университет|\bвуз")
 EXCLUDED_EDITION = re.compile(
@@ -190,6 +193,12 @@ def matches_anydesk_package(terms: set[str], title_terms: set[str]) -> bool:
     )
 
 
+def csp_scope(text: str) -> str:
+    if CSP_WORKPLACE.search(text) or CSP_NO_SERVER.search(text):
+        return "workplace"
+    return "server" if CSP_SERVER.search(text) else ""
+
+
 def matches_csp_package(query: str, terms: set[str], title: str) -> bool:
     if "криптопро csp" not in title:
         return False
@@ -197,6 +206,9 @@ def matches_csp_package(query: str, terms: set[str], title: str) -> bool:
     named = modules & set(words(title))
     requested = modules & terms
     if requested != named:
+        return False
+    scope = csp_scope(query)
+    if not requested and scope and scope != csp_scope(title):
         return False
     version = CSP_VERSION_REQUEST.search(query)
     if not version:
@@ -237,6 +249,16 @@ def is_cyber_backup(terms: set[str]) -> bool:
 
 
 def specialized_package_penalty(query: str, terms: set[str], title: str) -> int:
+    if (
+        {"криптопро", "csp"} <= terms
+        and not {"tls", "tsp"} & terms
+        and not csp_scope(query)
+        and (
+            csp_scope(title) == "server"
+            or ("дистрибутив" in title and "дистрибутив" not in query)
+        )
+    ):
+        return 70
     if {"сканер", "вс"} <= terms:
         return 45 * sum(
             edition in title and edition not in query
@@ -856,11 +878,23 @@ class SearchEngine:
                     for row in self._retrieve(db, ["astra", "linux"], RANK_COLUMNS, 100)
                     if row["sku"] not in known_skus
                 )
-        weighted = self._rank(rows, clean, tokens, constraints, wants_astra_os, role)
+        csp = {"криптопро", "csp"} <= set(tokens) and not {"tls", "tsp"} & set(tokens)
+        scope = csp_scope(normalize(clean)) if csp else ""
+        rank_query = clean
+        if csp and not scope and preferred_platform:
+            scope = "server" if "server" in preferred_platform.lower() else "workplace"
+            rank_query += " для сервера" if scope == "server" else " для рабочего места"
+        weighted = self._rank(
+            rows, rank_query, tokens, constraints, wants_astra_os, role
+        )
         items = self._top_items(weighted, limit, constraints, preferred_platform)
         clarification = None
         main = items[0] if items else None
-        if (
+        if csp and main and not scope and not constraints["operation"]:
+            clarification = (
+                "Нужна лицензия КриптоПро CSP для рабочего места или для сервера?"
+            )
+        elif (
             not main
             and "kaspersky" in tokens
             and constraints["operation"] == "renewal"
