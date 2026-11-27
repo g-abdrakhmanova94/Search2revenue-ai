@@ -35,6 +35,9 @@ ANYDESK_SOURCE = "https://support.anydesk.com/supported-operating-systems"
 QNAP_SOURCE = "https://www.qnap.com/en-us/product/ts-233/specs/software?os=qts"
 HANDY_NAS_SOURCE = "https://www.handybackup.ru/backup-comparisons.shtml"
 SCANNER_SOURCE = "https://scaner-vs.ru/wp-content/uploads/2025/06/%D0%98%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%86%D0%B8%D1%8F-%D0%BF%D0%BE-%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B5-%D0%A1%D0%BA%D0%B0%D0%BD%D0%B5%D1%80-%D0%92%D0%A1-7.pdf"
+SCANNER_PLATFORMS = "https://etecs.ru/getscanervs/"
+ALT_RELEASE_SOURCE = "https://cve.basealt.ru/report-24032025-c10f2-c10f1-special.html"
+SCANNER_WSL_SOURCE = "https://docs.etecs.ru/scanner/docs/7.0/getting-started/installation/windows-wsl-install/"
 RUTOKEN_SOURCE = "https://dev.rutoken.ru/pages/viewpage.action?pageId=2228237"
 RUTOKEN_ACTIVE_SOURCE = (
     "https://developer.rutoken.ru/pages/viewpage.action?pageId=86048961"
@@ -338,6 +341,27 @@ SCANNER_OS = CompanionOffer(
     SCANNER_SOURCE,
     "Инструкция по установке Сканера-ВС 7 на Astra Linux 1.7 и 1.8",
 )
+SCANNER_ALT = CompanionOffer(
+    "scanner-os",
+    "альт сп рабочая станция",
+    "BaseALT Альт СП Рабочая станция, релиз 10 (бессрочная лицензия с сертификатом ФСТЭК), архитектура 64 бит",
+    "%Платформа: Linux%Тип лицензии: полная версия%Тип клиента: юрлицо%",
+    "Вариант ОС для нового развёртывания. Для Сканера-ВС 7 нужен обновлённый образ Альт СП 10.2.",
+    SCANNER_PLATFORMS,
+    "Для Сканера-ВС 7 Base указан дистрибутив под Альт СП 10.2.",
+)
+WINDOWS_11_SKU = (
+    "windows 11 pro",
+    "Microsoft Windows 11 Pro FQC-10572, электронный ключ",
+    "%Платформа: Windows 11 Pro%Тип лицензии: esd%",
+)
+SCANNER_WINDOWS = CompanionOffer(
+    "scanner-os",
+    *WINDOWS_11_SKU,
+    "Вариант ОС для нового развёртывания. Сканер-ВС 7 работает через WSL 2 на ПК с поддержкой виртуализации.",
+    SCANNER_WSL_SOURCE,
+    "Поддерживается установка на Windows 10 и 11 в среде WSL 2.",
+)
 OFFICE_PROTECTION = CompanionOffer(
     "security",
     "kaspersky small office security",
@@ -416,7 +440,11 @@ def scanner_primary_evidence(
         or "astra linux special edition" not in platform
         or "1.8" not in platform
         or context
-        or re.search(r"windows|виндоус|macos|arm(?:64)?|aarch64|\b1\.7\b", query)
+        or re.search(r"\b(?:без|не для)\s+(?:astra|астр\w*|linux|линукс)", query)
+        or re.search(
+            r"windows|виндоус|macos|arm(?:64)?|aarch64|\b1\.[67]\b|ред ос|альт|сервер",
+            query,
+        )
     ):
         return None
     return catalog_evidence("platform", primary["platform"], primary["url"])
@@ -560,6 +588,15 @@ def offer_evidence(offer: CompanionOffer) -> list[dict[str, str]]:
                 "url": HANDY_NAS_SOURCE,
             }
         )
+    if offer is SCANNER_ALT:
+        facts.append(
+            {
+                "kind": "vendor",
+                "field": "BaseALT · обновление",
+                "value": "Альт СП 10.2 — обновлённый образ релиза 10.",
+                "url": ALT_RELEASE_SOURCE,
+            }
+        )
     return facts
 
 
@@ -603,7 +640,17 @@ def specialized_offers(
 ) -> tuple[tuple[CompanionOffer, ...], dict[str, str]] | None:
     scanner_evidence = scanner_primary_evidence(primary, query, context, requested)
     if scanner_evidence:
-        return (SCANNER_OS,), scanner_evidence
+        offers = [SCANNER_OS]
+        text = normalize(query)
+        platform = normalize(primary["platform"])
+        if not re.search(r"\b(?:astra|астра|астр\w+|linux|линукс)\b", text):
+            if "альт рабочая станция 10" in platform:
+                offers.append(SCANNER_ALT)
+            if "windows 11" in platform and not re.search(
+                r"отечественн|российск|импортозамещ", text
+            ):
+                offers.append(SCANNER_WINDOWS)
+        return tuple(offers), scanner_evidence
     signature_offers = csp_offers(primary, query, context, requested)
     if signature_offers:
         server = csp_scope(normalize(primary["name"])) == "server"
