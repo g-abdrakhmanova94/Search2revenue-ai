@@ -102,13 +102,15 @@ class Service:
 
     def anydesk_alternative(self, query: str, context: str) -> list[dict]:
         requested = re.fullmatch(
-            r"any\s*desk\s+(solo|standard)", query.strip(), re.IGNORECASE
+            r"any\s*desk\s+(solo|standard)(\s+(?:для|на|под)\s+windows(?:\s+(?:10|11))?)?",
+            query.strip(),
+            re.IGNORECASE,
         )
         if not requested:
             return []
         edition, reason = ANYDESK_SUBSTITUTE[requested[1].lower()]
         items = self.engine.search(
-            "AnyDesk " + edition,
+            f"AnyDesk {edition}{requested[2] or ''}",
             preferred_platform=preferred_platform(query, context),
         )["items"]
         return [
@@ -127,14 +129,18 @@ class Service:
         windows = intent["platform"]
         quantity = intent["quantity"]
         if (
-            not {"maxpatrol", "epp"} <= terms
-            or terms - {"maxpatrol", "epp", "endpoint", "protection", "platform"}
+            terms
+            not in (
+                {"maxpatrol", "epp"},
+                {"maxpatrol", "endpoint", "protection", "platform"},
+            )
             or intent["operation"] != "new"
-            or windows not in {"windows 10", "windows 11"}
+            or windows not in {"windows", "windows 10", "windows 11"}
             or not quantity
             or intent["delivery"]
             or intent["excluded_editions"]
             or intent["conflict"]
+            or intent["local_only"]
         ):
             return []
         items = self.engine.search(
@@ -153,7 +159,7 @@ class Service:
                     dict(
                         item,
                         reason="Базовая защита рабочих станций Windows. Для перехода потребуется внедрение Kaspersky Security Center.",
-                        source="https://support.kaspersky.ru/KSC/13/ru-RU/209155.htm",
+                        source="https://support.kaspersky.com/help/KESWin/12.10/en-US/KESWin-12.10-en-US.pdf",
                     )
                 ]
         return []

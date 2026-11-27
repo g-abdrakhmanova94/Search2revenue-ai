@@ -442,6 +442,9 @@ class SearchTest(unittest.TestCase):
         self.assertEqual(
             service.search("AnyDesk Standard для Linux")["alternatives"], []
         )
+        windows = service.search("AnyDesk Standard для Windows 11")["alternatives"]
+        self.assertEqual([item["code"] for item in windows], ["ADV"])
+        self.assertIn("Операционная система подтверждена", windows[0]["confirmed"])
 
     def test_anydesk_windows_version_can_use_vendor_evidence(self):
         service = self.make_service(
