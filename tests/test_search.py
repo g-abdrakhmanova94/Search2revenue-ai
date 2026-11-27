@@ -758,6 +758,20 @@ class SearchTest(unittest.TestCase):
         self.service.search("ESD20")
         self.assertEqual(self.service.analytics()["events"], 1)
 
+    def test_search_event_is_counted_when_diagnostics_are_unavailable(self):
+        with (
+            patch.object(
+                self.service.improvements,
+                "log_failure",
+                side_effect=sqlite3.OperationalError("database is locked"),
+            ) as diagnostics,
+            self.assertLogs("app", level="WARNING"),
+        ):
+            result = self.service.search("неизвестныйuser@example.com")
+        diagnostics.assert_called_once()
+        self.assertEqual(result["status"], "no_results")
+        self.assertEqual(self.service.analytics()["events"], 1)
+
     def test_queue_allows_a_search_to_wait_for_a_slot(self):
         queue = SearchQueue(workers=1, waiting=1, wait_seconds=1)
         attempting = Event()

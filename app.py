@@ -14,7 +14,7 @@ from copy import deepcopy
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from urllib.parse import parse_qs, urlsplit
 
 from improvements import ImprovementQueue
@@ -67,8 +67,10 @@ class Service:
         )
         self.log_diagnostics = log_diagnostics
         self.log_path = log_path
+        self.event_write_lock = Lock()
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with closing(sqlite3.connect(self.log_path)) as db, db:
+            db.execute("PRAGMA journal_mode=WAL").fetchone()
             db.execute(
                 """CREATE TABLE IF NOT EXISTS search_event (
                 happened INTEGER NOT NULL, status TEXT NOT NULL, result_count INTEGER NOT NULL,
@@ -219,10 +221,13 @@ class Service:
             else result.get("failure_reason")
         )
         try:
-            if reason and self.log_diagnostics:
-                self.improvements.log_failure(query, reason)
-            connection = sqlite3.connect(self.log_path, timeout=EVENTS_TIMEOUT_SECONDS)
-            with closing(connection) as db, db:
+            with (
+                self.event_write_lock,
+                closing(
+                    sqlite3.connect(self.log_path, timeout=EVENTS_TIMEOUT_SECONDS)
+                ) as db,
+                db,
+            ):
                 db.execute(
                     "INSERT INTO search_event VALUES (?,?,?,?,?)",
                     (
@@ -235,6 +240,11 @@ class Service:
                 )
         except sqlite3.Error:
             LOG.warning("Could not record search analytics")
+        if reason and self.log_diagnostics:
+            try:
+                self.improvements.log_failure(query, reason)
+            except sqlite3.Error:
+                LOG.warning("Could not record search diagnostics")
 
     def analytics(self, *, manager: bool = False) -> dict:
         with closing(sqlite3.connect(self.log_path, timeout=5)) as db:
