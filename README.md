@@ -173,6 +173,53 @@ flowchart TD
 
 Схема относится к `/api/search`. Подсказки обрабатываются отдельным маршрутом без записи поискового события.
 
+### UML Sequence — от запроса до карточек
+
+```mermaid
+sequenceDiagram
+    actor User as Покупатель
+    participant Web as Браузер
+    participant API as HTTP API
+    participant Queue as Очередь поиска
+    participant Search as Сервис подбора
+    participant Catalog as catalog.sqlite
+    participant Events as events.sqlite
+
+    User->>Web: Вводит запрос и нажимает «Найти»
+    Web->>API: GET /api/search с q и context
+    API->>API: Проверяет длину запроса и профиль
+    alt Пустой запрос или более 240 символов
+        API-->>Web: HTTP 400 с текстом ошибки
+        Web-->>User: Показывает сообщение
+    else Запрос принят
+        API->>Queue: Запрашивает слот
+        alt Очередь заполнена или время ожидания истекло
+            Queue-->>API: Слот недоступен
+            API-->>Web: HTTP 503 и Retry-After
+            Web-->>User: Предлагает повторить поиск
+        else Слот выделен
+            Queue-->>API: Слот доступен
+            API->>Search: Подобрать товары для запроса и профиля
+            alt Готовый ответ есть в кеше
+                Search->>Search: Берёт ранее собранную выдачу
+            else Нужно собрать выдачу
+                Search->>Search: Нормализует запрос и выделяет условия
+                Search->>Catalog: Ищет артикул или кандидатов через FTS5
+                Catalog-->>Search: Возвращает поля товарных предложений
+                Search->>Search: Ранжирует и проверяет условия покупки
+                Search->>Search: Подбирает допродажи или аналог
+            end
+            Search->>Events: Записывает агрегаты запроса
+            Search-->>API: Карточки и при необходимости уточнение
+            API->>Queue: Освобождает слот
+            API-->>Web: HTTP 200 с JSON
+            Web-->>User: Показывает карточки, уточнение или пустую выдачу
+        end
+    end
+```
+
+Кеш выдачи включён на стенде. Задержка или ошибка записи в журнал не отменяет результат поиска.
+
 ### ERD — данные каталога и аналитики
 
 ```mermaid
