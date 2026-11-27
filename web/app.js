@@ -87,6 +87,8 @@ function clearResults() {
   byId("products").replaceChildren();
   byId("recommendations").replaceChildren();
   byId("notice").replaceChildren();
+  byId("related").replaceChildren();
+  byId("related").hidden = true;
 }
 
 function showLoading() {
@@ -109,7 +111,7 @@ function showResults(data) {
   if (spelling.length) byId("notice").append(element("p", spelling.map(([a,b])=>a+" → "+b).join(", "), "notice"));
   if (data.rewritten_to) byId("notice").append(element("p", "Уточнённый поиск · " + data.rewritten_to, "notice"));
   if (data.clarification) byId("notice").append(element("p", data.clarification, "notice"));
-  if (data.top_four_count > 0 && data.top_four_count < 4) {
+  if (!data.clarification && data.top_four_count > 0 && data.top_four_count < 4) {
     byId("notice").append(element("p", "В каталоге найдено меньше четырёх подходящих семейств.", "notice"));
   }
   if (alternatives.length) {
@@ -120,6 +122,28 @@ function showResults(data) {
   byId("products").replaceChildren(...[...data.items, ...alternatives].map(product));
   byId("recommendations").replaceChildren(...data.recommendations.map(product));
   byId("extras").hidden = data.recommendations.length === 0;
+  showRelated(Array.isArray(data.related_queries) ? data.related_queries : [], data.related_info);
+}
+
+function showRelated(searches, info) {
+  if (!searches.length && !info) return;
+  const related = byId("related");
+  if (searches.length) {
+    const buttons = element("div", "", "related-actions");
+    for (const value of searches) {
+      const button = element("button", value);
+      button.type = "button";
+      button.addEventListener("click", () => {
+        query.value = value;
+        query.focus();
+        return runSearch();
+      });
+      buttons.append(button);
+    }
+    related.append(element("h3", "Связанные запросы"), buttons);
+  }
+  if (info) related.append(link(info.title, info.source, "source"), element("p", info.detail));
+  related.hidden = false;
 }
 
 async function runSearch({writeRoute = true} = {}) {

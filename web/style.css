@@ -78,6 +78,12 @@ h2 { margin: 0 0 var(--space-1); font-size: 1.13rem; line-height: 1.35; overflow
 .section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: var(--space-1); }
 .section-head p { color: var(--sub); margin: 0 0 var(--space-1); font-size: .9rem; }
 .cards { display: grid; grid-template-columns: minmax(0, 1fr); }
+.related { border-top: 1px solid var(--line); padding-block: var(--space-2); }
+.related h3, .related p { margin: 0; }
+.related h3 { font-size: 1rem; }
+.related p { font-size: .9rem; color: var(--sub); }
+.related-actions { display: flex; flex-wrap: wrap; gap: var(--space-half); margin-block: var(--space-1); }
+.related-actions button { min-block-size: 44px; white-space: normal; text-align: left; }
 .card { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) 0; border-top: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
 .card p, .card h3 { margin: 0; }
 .card h3 { font-size: 1.04rem; line-height: 1.4; }

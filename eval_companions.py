@@ -134,8 +134,21 @@ CASES = (
         "MaxPatrol EPP новая лицензия на 150 ПК для Windows 11",
         alternatives=(ENDPOINT_ALTERNATIVE,),
     ),
+    Case(
+        "MaxPatrol EPP новая лицензия на 150 ПК для Windows",
+        alternatives=(ENDPOINT_ALTERNATIVE,),
+    ),
+    Case(
+        "MaxPatrol Endpoint Protection Platform новая лицензия на 200 ПК для Windows 10",
+        alternatives=(ENDPOINT_ALTERNATIVE,),
+    ),
     Case("MaxPatrol EPP новая лицензия на 500 ПК для Windows 11"),
     Case("MaxPatrol EPP новая лицензия на 150 ПК для macOS"),
+    Case(
+        "Microsoft Office для дома и бизнеса, антивирус уже есть",
+        direct=("Microsoft Office для дома и бизнеса 2024",),
+        companions=(BACKUP, SOLO),
+    ),
     Case("мтс", direct=MTS_LINK, companions=("Гарнитура Logitech H540",)),
     Case("МТС Линк без гарнитуры", direct=MTS_LINK),
     Case("МТС Линк только лицензия", direct=MTS_LINK),

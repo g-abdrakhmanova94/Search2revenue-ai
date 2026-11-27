@@ -18,7 +18,14 @@ from threading import Event, Lock, Thread
 from urllib.parse import parse_qs, urlsplit
 
 from improvements import ImprovementQueue
-from recommendations import PROFILES, companion_items, preferred_platform
+from recommendations import (
+    EXISTING_ANTIVIRUS,
+    MAXPATROL_INTEGRATIONS,
+    PROFILES,
+    companion_items,
+    preferred_platform,
+    related_searches,
+)
 from search import SearchEngine, normalize, parse_intent
 from search_queue import SearchQueue
 
@@ -182,7 +189,10 @@ class Service:
     def _search_payload(
         self, query: str, context: str, replacement: str | None, record: bool
     ) -> dict:
-        terms = COMBINED.split(query, maxsplit=1)
+        search_query, removed_context = EXISTING_ANTIVIRUS.subn("", query)
+        terms = COMBINED.split(
+            search_query.strip(" ,.;") if removed_context else query, maxsplit=1
+        )
         result = self.engine.search(
             terms[0],
             rewrite=replacement,
@@ -209,14 +219,13 @@ class Service:
             and not result["intent"]["operation"]
         ):
             clarification = "Подбираете новую лицензию или продлеваете действующую?"
-        if (
-            not clarification
-            and products
-            and not result["intent"]["operation"]
+        epp_renewal = bool(
+            products
             and "maxpatrol endpoint protection platform"
             in normalize(products[0]["name"])
             and "тип лицензии: продление" in normalize(products[0]["description"])
-        ):
+        )
+        if not clarification and epp_renewal and not result["intent"]["operation"]:
             clarification = "В каталоге есть продление MaxPatrol EPP. Для новой покупки укажите ОС и количество устройств."
         status = (
             "needs_clarification"
@@ -241,6 +250,14 @@ class Service:
             top_four_count=top_four_count,
             status=status,
             clarification=clarification,
+            related_queries=related_searches(query) if record else (),
+            related_info={
+                "title": "Интеграции MaxPatrol EPP",
+                "detail": "В документации Positive Technologies описаны MaxPatrol SIEM, MaxPatrol VM и PT Sandbox.",
+                "source": MAXPATROL_INTEGRATIONS,
+            }
+            if record and epp_renewal
+            else None,
         )
         return result
 

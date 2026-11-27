@@ -40,6 +40,11 @@ SCANNER_PLATFORMS = "https://etecs.ru/getscanervs/"
 ALT_RELEASE_SOURCE = "https://cve.basealt.ru/report-24032025-c10f2-c10f1-special.html"
 SCANNER_WSL_SOURCE = "https://docs.etecs.ru/scanner/docs/7.0/getting-started/installation/windows-wsl-install/"
 MTS_LINK_HARDWARE_SOURCE = "https://help.mts-link.ru/article/19765"
+MAXPATROL_INTEGRATIONS = "https://global.ptsecurity.com/en/products/endpoint/"
+EXISTING_ANTIVIRUS = re.compile(
+    r"\b(?:антивирус\s+уже\s+есть|уже\s+есть\s+антивирус|антивирус\s+установлен)\b",
+    re.IGNORECASE,
+)
 RUTOKEN_SOURCE = "https://dev.rutoken.ru/pages/viewpage.action?pageId=2228237"
 RUTOKEN_ACTIVE_SOURCE = (
     "https://developer.rutoken.ru/pages/viewpage.action?pageId=86048961"
@@ -509,6 +514,7 @@ def csp_offers(
 
 def workstation_purposes(requested: str, query: str) -> set[str]:
     text = normalize(requested)
+    has_antivirus = bool(EXISTING_ANTIVIRUS.search(normalize(query)))
     excludes_nas = re.search(
         r"\b(?:без|не нужен|не нужно)\s+(?:nas|сетев\w*\s+хранилищ)", normalize(query)
     )
@@ -517,11 +523,31 @@ def workstation_purposes(requested: str, query: str) -> set[str]:
             return {"backup", "nas"}
         return {"backup"}
     if any(stem in text for stem in ("защит", "антивирус")):
-        return {"security"}
+        return set() if has_antivirus else {"security"}
     purposes = {"backup", "security", "remote"} if not text else set()
+    if has_antivirus:
+        purposes.discard("security")
     if not text and not excludes_nas:
         purposes.add("nas")
     return purposes
+
+
+MAXPATROL_REFINEMENTS = ("MaxPatrol EPP продление", "MaxPatrol EPP новая лицензия")
+RELATED_SEARCHES = {
+    ("maxpatrol",): MAXPATROL_REFINEMENTS,
+    ("maxpatrol", "epp"): MAXPATROL_REFINEMENTS,
+    ("astra", "linux"): (
+        "Astra Linux SE для рабочих станций",
+        "Astra Linux и защита рабочих мест",
+    ),
+    ("anydesk",): ("AnyDesk Standard", "AnyDesk Advanced"),
+    ("сервер",): ("стоечный сервер", "ПО для установки на сервер"),
+}
+
+
+def related_searches(query: str) -> tuple[str, ...]:
+    tokens, constraints = parse_intent(query)
+    return () if any(constraints.values()) else RELATED_SEARCHES.get(tuple(tokens), ())
 
 
 def workstation_primary_evidence(primary: dict) -> dict[str, str]:

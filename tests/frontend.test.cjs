@@ -13,6 +13,7 @@ function node(tag) {
     replaceChildren(...children) { this.children = children; },
     addEventListener(event, handler) { this.listeners[event] = handler; },
     setAttribute(key, value) { this.attributes[key] = value; },
+    focus() { this.focused = true; },
   };
 }
 
@@ -119,6 +120,30 @@ test("clarification and rejected requests keep the search form usable", async ()
   await failed.ui.runSearch();
   assert.equal(failed.get("status").textContent, "Сервис недоступен");
   assert.equal(failed.get("submit").disabled, false);
+});
+
+test("a related query starts a new search and keeps focus in the search field", async () => {
+  const queries = [];
+  const {ui, get} = frontend(async url => {
+    queries.push(url.searchParams.get("q"));
+    return {ok: true, json: async () => ({
+      items: [], recommendations: [], status: "needs_clarification",
+      related_queries: queries.length === 1 ? ["MaxPatrol EPP продление"] : [],
+      related_info: queries.length === 1 ? {
+        title: "Интеграции MaxPatrol EPP", detail: "MaxPatrol SIEM и PT Sandbox",
+        source: "https://global.ptsecurity.com/en/products/endpoint/",
+      } : null,
+    })};
+  });
+  get("query").value = "max patrol";
+  await ui.runSearch();
+  const related = get("related");
+  assert.equal(related.hidden, false);
+  assert.equal(related.children[2].tag, "a");
+  await related.children[1].children[0].listeners.click();
+  assert.deepEqual(queries, ["max patrol", "MaxPatrol EPP продление"]);
+  assert.equal(get("query").focused, true);
+  assert.equal(related.hidden, true);
 });
 
 test("a busy search can be retried and an analytics failure stays in its own panel", async () => {

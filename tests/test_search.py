@@ -331,6 +331,10 @@ class SearchTest(unittest.TestCase):
         )
         for query, codes in (
             ("Microsoft Office 2024 для дома и бизнеса", ["S1", "B1", "R1"]),
+            (
+                "Microsoft Office 2024 для дома и бизнеса, антивирус уже есть",
+                ["B1", "R1"],
+            ),
             ("365", ["S2", "B1"]),
             ("AnyDesk", ["S1", "B1"]),
             ("Kaspersky Small Office Security", ["B1", "R1"]),
