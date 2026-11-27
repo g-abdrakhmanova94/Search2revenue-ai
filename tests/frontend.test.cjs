@@ -235,7 +235,7 @@ test("pending analytics does not disable search or obscure the number of add-ons
   get("analytics").hidden = false;
   await ui.runSearch();
   assert.equal(get("submit").disabled, false);
-  assert.equal(get("status").textContent, "Найден 1 товар и 3 допродажи");
+  assert.equal(get("status").textContent, "Найден 1 товар и 3 сопутствующих товара");
   finishAnalytics({ok: false, json: async () => ({error: "Временно недоступно"})});
 });
 
@@ -249,7 +249,7 @@ test("a functional alternative is marked separately from exact results", async (
   get("query").value = "Microsoft Office 2021";
   await ui.runSearch();
   assert.equal(get("products").children.length, 1);
-  assert.equal(get("notice").children[0].textContent, "Точного совпадения нет. Показываем альтернативу.");
+  assert.equal(get("notice").children[0].textContent, "Точного совпадения нет. Посмотрите аналог.");
   assert.equal(get("status").textContent, "Есть альтернатива");
   assert.equal(get("extras").hidden, true);
 });

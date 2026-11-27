@@ -42,7 +42,7 @@ function product(item) {
   }
   for (const fact of item.evidence || []) {
     const cited = element("p", "", "evidence");
-    const origin = fact.kind === "vendor" ? "Документ вендора" : "Фид Softline";
+    const origin = fact.kind === "vendor" ? "Документация" : "Каталог Softline";
     cited.append(link(origin + " — " + fact.field, fact.url, "source"), element("span", fact.value));
     card.append(cited);
   }
@@ -103,7 +103,7 @@ function showResults(data) {
   const count = data.items.length;
   const companions = data.recommendations.length;
   const goods = count === 1 ? "Найден 1 товар" : "Найдено " + count + " товара";
-  const extras = companions === 1 ? " и 1 допродажа" : companions ? " и " + companions + " допродажи" : "";
+  const extras = companions === 1 ? " и 1 сопутствующий товар" : companions ? " и " + companions + " сопутствующих товара" : "";
   byId("status").textContent = count ? goods + extras : alternatives.length ? "Есть альтернатива" : data.status === "needs_clarification" ? "Нужно уточнение" : "Нет результатов";
   const spelling = Object.entries(data.corrections || {});
   if (spelling.length) byId("notice").append(element("p", spelling.map(([a,b])=>a+" → "+b).join(", "), "notice"));
@@ -113,7 +113,7 @@ function showResults(data) {
     byId("notice").append(element("p", "В каталоге найдено меньше четырёх подходящих семейств.", "notice"));
   }
   if (alternatives.length) {
-    byId("notice").append(element("p", "Точного совпадения нет. Показываем альтернативу.", "notice"));
+    byId("notice").append(element("p", "Точного совпадения нет. Посмотрите аналог.", "notice"));
   } else if (data.status === "no_results") {
     byId("notice").append(element("p", "Попробуйте уточнить название, артикул или условия покупки.", "notice"));
   }
@@ -247,7 +247,7 @@ function renderManager(data) {
     card.append(
       element("strong", proposal.query + " → " + proposal.replacement),
       element("span", "Выдача " + proposal.report.before + " → " + proposal.report.after
-        + " · регрессии " + passed + "/" + proposal.report.regressions.length),
+        + " · контрольные тесты " + passed + "/" + proposal.report.regressions.length),
       status,
     );
     if (proposal.report.top.length) {
