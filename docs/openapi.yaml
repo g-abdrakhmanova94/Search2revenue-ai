@@ -1,0 +1,318 @@
+openapi: 3.1.1
+info:
+  title: Search2Revenue AI
+  version: "1.0"
+  description: Поиск, подсказки и аналитика по каталогу Softline.
+servers:
+  - url: https://search2revenue.193-8-112-239.sslip.io
+    description: Демонстрационный стенд
+  - url: http://127.0.0.1:8178
+    description: Локальный запуск
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Проверить доступность процесса
+      responses:
+        "200":
+          description: Процесс отвечает
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { const: true }
+    head:
+      operationId: headHealth
+      summary: Проверить доступность процесса без тела ответа
+      responses:
+        "200":
+          description: Процесс отвечает
+  /api/search:
+    get:
+      operationId: searchCatalog
+      summary: Найти товары, допродажи и аналоги
+      description: Запрос учитывается в агрегатах поиска. Пустая выдача возвращается с HTTP 200.
+      parameters:
+        - $ref: "#/components/parameters/Query"
+        - $ref: "#/components/parameters/Context"
+      responses:
+        "200":
+          description: Результат подбора
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SearchResult" }
+        "400": { $ref: "#/components/responses/InvalidQuery" }
+        "503": { $ref: "#/components/responses/Busy" }
+  /api/suggestions:
+    get:
+      operationId: getSuggestions
+      summary: Подсказать товары при вводе запроса
+      description: Подсказки не увеличивают счётчики поиска. Возможна одна предварительная допродажа.
+      parameters:
+        - $ref: "#/components/parameters/Query"
+        - $ref: "#/components/parameters/Context"
+      responses:
+        "200":
+          description: Подсказки и предварительная допродажа
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SearchResult"
+                  - type: object
+                    required: [companion_preview]
+                    properties:
+                      companion_preview:
+                        anyOf:
+                          - $ref: "#/components/schemas/Product"
+                          - type: "null"
+        "400": { $ref: "#/components/responses/InvalidQuery" }
+        "503": { $ref: "#/components/responses/Busy" }
+  /api/analytics:
+    get:
+      operationId: getSearchAnalytics
+      summary: Получить агрегаты поиска
+      description: На публичном стенде доступны агрегаты. Данные о проблемах и предложениях доступны в локальной панели менеджера.
+      responses:
+        "200":
+          description: Счётчики и среднее время обработки
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Analytics" }
+        "503":
+          description: Хранилище аналитики временно недоступно
+          headers:
+            Retry-After: { $ref: "#/components/headers/RetryAfter" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/improvements/approve:
+    post:
+      operationId: approveSearchImprovement
+      summary: Одобрить проверенное предложение
+      description: Доступно при включённой панели менеджера с loopback-адреса. Origin должен совпадать с локальным origin сервиса.
+      servers:
+        - url: http://127.0.0.1:8178
+      parameters:
+        - in: header
+          name: Origin
+          required: true
+          schema: { type: string }
+          example: http://127.0.0.1:8178
+      requestBody:
+        required: true
+        description: Размер тела до 1024 байт.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Предложение одобрено
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [approved]
+                properties:
+                  approved: { const: true }
+        "400": { $ref: "#/components/responses/InvalidProposal" }
+        "403": { $ref: "#/components/responses/ManagerOnly" }
+        "409": { $ref: "#/components/responses/ProposalConflict" }
+        "415": { $ref: "#/components/responses/ExpectedJson" }
+components:
+  headers:
+    RetryAfter:
+      description: Интервал до повторной попытки в секундах
+      schema: { type: integer, const: 1 }
+  parameters:
+    Query:
+      name: q
+      in: query
+      required: true
+      description: Текст поискового запроса. Пробелы по краям удаляются до проверки длины.
+      schema: { type: string, minLength: 1, maxLength: 240 }
+      example: AnyDesk для Windows 11
+    Context:
+      name: context
+      in: query
+      description: >
+        Профиль среды для проверки совместимости. Сервис распознаёт windows-office
+        (Windows 11) и windows-server (Windows Server 2019). Другие значения игнорируются.
+      schema: { type: string }
+      example: windows-office
+  responses:
+    InvalidQuery:
+      description: Запрос пустой или длиннее 240 символов после обрезки пробелов
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Busy:
+      description: Поисковая очередь заполнена или истекло время ожидания слота
+      headers:
+        Retry-After: { $ref: "#/components/headers/RetryAfter" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InvalidProposal:
+      description: Некорректный JSON, размер тела или идентификатор предложения
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ManagerOnly:
+      description: Запрос не прошёл проверку локального доступа или Origin
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ProposalConflict:
+      description: Предложение уже обработано, недоступно или устарело
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ExpectedJson:
+      description: Требуется Content-Type application/json
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Evidence:
+      type: object
+      required: [kind, field, value, url]
+      properties:
+        kind: { type: string, enum: [feed, vendor] }
+        field: { type: string }
+        value: { type: string }
+        url: { type: string, format: uri }
+    Product:
+      type: object
+      required: [sku, group, code, name, vendor, url, category, category_id, available, price, old_price, currency, description, platform, confirmed, unknown, evidence, family_url]
+      properties:
+        sku:
+          type: string
+          description: Идентификатор предложения. Может быть пустым для карточки витрины без артикула.
+        group: { type: string }
+        code: { type: string }
+        name: { type: string }
+        vendor: { type: string }
+        url: { type: string, format: uri }
+        category: { type: string }
+        category_id: { type: string }
+        available: { type: boolean }
+        quote_only:
+          type: boolean
+          description: Цена уточняется в магазине.
+        price: { type: [number, "null"] }
+        old_price: { type: [number, "null"] }
+        currency: { type: string }
+        description: { type: string }
+        platform: { type: string }
+        confirmed:
+          type: array
+          items: { type: string }
+        unknown:
+          type: array
+          items: { type: string }
+        evidence:
+          type: array
+          items: { $ref: "#/components/schemas/Evidence" }
+        family_url: { type: string, format: uri-reference }
+        reason: { type: string }
+        source: { type: string, format: uri }
+    Intent:
+      type: object
+      required: [operation, delivery, quantity, conflict, platform, excluded_editions, local_only]
+      properties:
+        operation: { enum: [renewal, new, null] }
+        delivery: { enum: [electronic, usb, null] }
+        quantity: { type: [integer, "null"], minimum: 0 }
+        conflict: { type: [string, "null"] }
+        platform: { type: [string, "null"] }
+        excluded_editions:
+          type: array
+          items: { type: string }
+        local_only: { type: boolean }
+    SearchResult:
+      type: object
+      required: [items, alternatives, recommendations, corrections, intent, clarification, failure_reason, rewritten_to, top_four_count, status, related_queries, related_info, elapsed_ms]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        alternatives:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        recommendations:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        corrections:
+          type: object
+          additionalProperties: { type: string }
+        intent: { $ref: "#/components/schemas/Intent" }
+        clarification: { type: [string, "null"] }
+        failure_reason:
+          enum: [missing_product, no_catalog_match, constraints_filtered, irrelevant_matches, null]
+        rewritten_to: { type: [string, "null"] }
+        top_four_count:
+          type: integer
+          minimum: 0
+          maximum: 4
+          description: Число прямых совпадений и допродаж. Аналоги и предварительная допродажа в подсказках не входят.
+        status:
+          enum: [ok, limited, no_results, needs_clarification]
+        related_queries:
+          type: array
+          items: { type: string }
+        related_info:
+          type: [object, "null"]
+          required: [title, detail, source]
+          properties:
+            title: { type: string }
+            detail: { type: string }
+            source: { type: string, format: uri }
+        elapsed_ms: { type: number, minimum: 0 }
+    Analytics:
+      type: object
+      required: [manager, events, four_results, with_recommendations, mean_ms, statuses]
+      properties:
+        manager: { type: boolean }
+        events: { type: integer, minimum: 0 }
+        four_results: { type: integer, minimum: 0 }
+        with_recommendations: { type: integer, minimum: 0 }
+        mean_ms: { type: number, minimum: 0 }
+        statuses:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }
+        issues:
+          type: array
+          description: Доступно локальному менеджеру.
+          items:
+            type: object
+            required: [query, reason, hits, state, explanation]
+            properties:
+              query: { type: string }
+              reason: { type: string }
+              hits: { type: integer }
+              state: { type: string }
+              explanation: { type: string }
+        proposals:
+          type: array
+          description: Доступно локальному менеджеру.
+          items:
+            type: object
+            required: [id, query, replacement, status, report]
+            properties:
+              id: { type: integer }
+              query: { type: string }
+              replacement: { type: string }
+              status: { type: string }
+              report: { type: object }
