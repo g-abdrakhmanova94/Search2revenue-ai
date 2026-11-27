@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from itertools import chain
 
 from search import (
+    ANYDESK_SOURCE,
     SearchEngine,
     catalog_evidence,
     csp_scope,
@@ -16,6 +17,7 @@ from search import (
     parse_intent,
     platform_text,
     purchase_priority,
+    verified_anydesk_windows,
 )
 
 PROFILES = {"windows-office": "Windows 11", "windows-server": "Windows Server 2019"}
@@ -31,7 +33,6 @@ RUBACKUP_SERVER_SOURCE = (
 GRANULEX_SOURCE = "https://granulex.ru/documentation"
 HANDY_SOURCE = "https://www.handybackup.ru/programma-dlya-kopirovania-failov.shtml"
 KSOS_SOURCE = "https://www2.kaspersky.com/small-business-security/small-office-security"
-ANYDESK_SOURCE = "https://support.anydesk.com/supported-operating-systems"
 QNAP_SOURCE = "https://www.qnap.com/en-us/product/ts-233/specs/software?os=qts"
 HANDY_NAS_SOURCE = "https://www.handybackup.ru/backup-comparisons.shtml"
 SCANNER_SOURCE = "https://scaner-vs.ru/wp-content/uploads/2025/06/%D0%98%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%86%D0%B8%D1%8F-%D0%BF%D0%BE-%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B5-%D0%A1%D0%BA%D0%B0%D0%BD%D0%B5%D1%80-%D0%92%D0%A1-7.pdf"
@@ -77,13 +78,7 @@ def office_2024_source(primary: dict) -> dict[str, str] | None:
 
 
 def is_anydesk_windows(primary: dict) -> bool:
-    title = normalize(primary["name"])
-    return bool(
-        re.fullmatch(
-            r"anydesk \(лицензия на 1 год\), (?:solo|standard|advanced)", title
-        )
-        and "windows" in normalize(primary["platform"])
-    )
+    return verified_anydesk_windows(primary["name"], primary["platform"])
 
 
 def is_kaspersky_windows_office(primary: dict) -> bool:
@@ -93,6 +88,8 @@ def is_kaspersky_windows_office(primary: dict) -> bool:
 
 
 def windows_infrastructure(primary: dict, query: str, context: str) -> set[str]:
+    if re.search(r"\b(?:без|не для)\s+(?:windows|виндоус)\b", normalize(query)):
+        return set()
     explicit = windows_platforms(query)
     if not explicit and re.search(
         r"linux|\bmac(?:os)?\b|астра|линукс", query, re.IGNORECASE
@@ -386,6 +383,13 @@ REMOTE_SUPPORT = CompanionOffer(
     "Удалённая поддержка ПК Windows. Solo рассчитана на одного пользователя.",
     ANYDESK_SOURCE,
 )
+REMOTE_WORKSTATION_OS = CompanionOffer(
+    "workstation-os",
+    *WINDOWS_11_SKU,
+    "Для нового рабочего ПК, если лицензии на ОС ещё нет. AnyDesk поддерживает Windows 11.",
+    ANYDESK_SOURCE,
+    "Windows 11 входит в список поддерживаемых ОС AnyDesk.",
+)
 SIGNATURE_TOKEN = CompanionOffer(
     "key",
     "рутокен lite",
@@ -413,7 +417,7 @@ SIGNATURE_HARDWARE_TOKEN = CompanionOffer(
 )
 
 
-def workstation_offers(primary: dict) -> tuple[CompanionOffer, ...]:
+def workstation_offers(primary: dict, requested: str) -> tuple[CompanionOffer, ...]:
     if office_2024_source(primary):
         return OFFICE_PROTECTION, FILE_BACKUP, REMOTE_SUPPORT
     if normalize(primary["name"]).startswith(
@@ -421,7 +425,11 @@ def workstation_offers(primary: dict) -> tuple[CompanionOffer, ...]:
     ):
         return HOME_PROTECTION, FILE_BACKUP
     if is_anydesk_windows(primary):
-        return OFFICE_PROTECTION, FILE_BACKUP
+        return (
+            (OFFICE_PROTECTION, FILE_BACKUP, BACKUP_NAS)
+            if requested
+            else (OFFICE_PROTECTION, FILE_BACKUP, REMOTE_WORKSTATION_OS)
+        )
     if is_kaspersky_windows_office(primary):
         return FILE_BACKUP, REMOTE_SUPPORT, BACKUP_NAS
     return ()
@@ -491,14 +499,17 @@ def csp_offers(
 
 def workstation_purposes(requested: str, query: str) -> set[str]:
     text = normalize(requested)
+    excludes_nas = re.search(
+        r"\b(?:без|не нужен|не нужно)\s+(?:nas|сетев\w*\s+хранилищ)", normalize(query)
+    )
     if any(stem in text for stem in ("резервн", "бэкап")):
+        if not excludes_nas and re.search(r"\b(?:nas|сетев\w*\s+хранилищ)", text):
+            return {"backup", "nas"}
         return {"backup"}
     if any(stem in text for stem in ("защит", "антивирус")):
         return {"security"}
     purposes = {"backup", "security", "remote"} if not text else set()
-    if not text and not re.search(
-        r"\bбез\s+(?:nas|сетев\w*\s+хранилищ)", normalize(query)
-    ):
+    if not text and not excludes_nas:
         purposes.add("nas")
     return purposes
 
@@ -700,14 +711,25 @@ def companion_items(
     platforms = windows_infrastructure(primary, query, context)
     if not astra and not platforms:
         return []
-    offers = workstation_offers(primary)
+    offers = workstation_offers(primary, requested)
     if offers:
+        purposes = workstation_purposes(requested, query)
+        if not (
+            requested
+            or context
+            or EXPLICIT_PLATFORM.search(query)
+            or re.search(
+                r"\b(?:без\s+ос|только|для\s+дома|виндоус|arm(?:64)?|aarch64|продл\w*|renew\w*)\b",
+                normalize(query),
+            )
+        ):
+            purposes.add("workstation-os")
         return (
             items_for_offers(
                 engine,
                 direct,
                 offers,
-                workstation_purposes(requested, query),
+                purposes,
                 constraints,
                 workstation_primary_evidence(primary),
                 limit=limit,

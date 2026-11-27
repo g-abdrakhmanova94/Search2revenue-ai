@@ -137,6 +137,7 @@ PLATFORM_NAMES = {
     "linux": re.compile(r"\b(?:linux|линукс)\b"),
     "windows": re.compile(r"\bwindows\b"),
 }
+ANYDESK_SOURCE = "https://support.anydesk.com/docs/supported-operating-systems"
 OFFICE_YEARS = {"2016", "2019", "2021", "2024"}
 ALIAS_RE = re.compile(
     r"\b(?:" + "|".join(map(re.escape, sorted(ALIASES, key=len, reverse=True))) + r")\b"
@@ -372,13 +373,8 @@ def matches_explicit_requirements(
     row: sqlite3.Row, title: str, constraints: dict
 ) -> bool:
     platform = constraints.get("platform")
-    if platform:
-        declared = normalize(platform_text(row["description"]))
-        pattern = PLATFORM_NAMES.get(platform) or re.compile(
-            r"\b" + re.escape(platform) + r"\b"
-        )
-        if not pattern.search(declared):
-            return False
+    if platform and not platform_evidence(row, platform):
+        return False
     return not any(
         re.search(r"\b(?:" + pattern + r")", title)
         for pattern in constraints.get("excluded_editions", ())
@@ -475,6 +471,37 @@ def platform_text(description: str) -> str:
     return match[0].strip() if match else ""
 
 
+def verified_anydesk_windows(name: str, platform: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"anydesk \(лицензия на 1 год\), (?:solo|standard|advanced)",
+            normalize(name),
+        )
+        and "windows" in normalize(platform)
+    )
+
+
+def platform_evidence(row: sqlite3.Row, platform: str) -> dict[str, str] | None:
+    declared = platform_text(row["description"])
+    pattern = PLATFORM_NAMES.get(platform) or re.compile(
+        r"\b" + re.escape(platform) + r"\b"
+    )
+    if pattern.search(normalize(declared)):
+        return catalog_evidence("description", declared, row["url"])
+    if (
+        platform in {"windows 10", "windows 11"}
+        and normalize(declared).removeprefix("платформа:").strip() == "windows"
+        and verified_anydesk_windows(row["name"], declared)
+    ):
+        return {
+            "kind": "vendor",
+            "field": "AnyDesk · ОС",
+            "value": platform.title(),
+            "url": ANYDESK_SOURCE,
+        }
+    return None
+
+
 def quantity_evidence(row: sqlite3.Row, quantity: int) -> tuple[str, str] | None:
     description = row["description"]
     pattern = r"(?:узлов|устройств|рабоч\w* мест|пользователей)\s+от\s+(\d{1,6})\s+до\s+(\d{1,6})"
@@ -513,11 +540,9 @@ def license_evidence(
     title = row["name"]
     result = []
     if constraints.get("platform"):
-        result.append(
-            catalog_evidence(
-                "description", platform_text(row["description"]), row["url"]
-            )
-        )
+        evidence = platform_evidence(row, constraints["platform"])
+        if evidence:
+            result.append(evidence)
     if "Тип покупки подтверждён каталогом" in confirmed:
         pattern = RENEW if constraints["operation"] == "renewal" else NEW
         hit = next(
@@ -700,7 +725,7 @@ class SearchEngine:
             return False, [], []
         matched, confirmed, unknown = SearchEngine._license_fit(row, constraints)
         if matched and constraints.get("platform"):
-            confirmed.append("Операционная система подтверждена каталогом")
+            confirmed.append("Операционная система подтверждена")
         return matched, confirmed, unknown
 
     @staticmethod

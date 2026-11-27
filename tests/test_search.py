@@ -441,6 +441,22 @@ class SearchTest(unittest.TestCase):
             service.search("AnyDesk Standard для Linux")["alternatives"], []
         )
 
+    def test_anydesk_windows_version_can_use_vendor_evidence(self):
+        service = self.make_service(
+            offer(
+                "501",
+                "AnyDesk (лицензия на 1 год), Solo",
+                "21",
+                "SOLO",
+                description="Платформа: Windows • Тип лицензии: полная версия",
+            ),
+        )
+        items = service.search("AnyDesk для Windows 11")["items"]
+        self.assertEqual([item["code"] for item in items], ["SOLO"])
+        self.assertEqual(items[0]["evidence"][0]["kind"], "vendor")
+        self.assertEqual(items[0]["evidence"][0]["value"], "Windows 11")
+        self.assertEqual(service.search("AnyDesk для macOS")["items"], [])
+
     def test_csp_server_companions_respect_platform_and_license_type(self):
         tsp_name = (
             "Лицензия на право использования ПО КриптоПро TSP Client из состава "
