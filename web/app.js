@@ -2,9 +2,11 @@ const byId = id => document.getElementById(id);
 const query = byId("query");
 const form = byId("search");
 let lastSearch = 0;
+let requestedSearch;
 let lastAnalytics = 0;
 let suggestionTimer;
 let suggestionRequest;
+const REQUEST_TIMEOUT_MS = 15000;
 
 function element(tag, value, className) {
   const node = document.createElement(tag);
@@ -32,8 +34,8 @@ function product(item) {
   card.append(meta);
   card.append(element("h3", item.name));
   if (item.description) card.append(element("p", item.description, "small"));
-  if (item.confirmed.length) card.append(element("p", item.confirmed.join("; "), "facts"));
-  if (item.unknown.length) card.append(element("p", "Требует проверки: " + item.unknown.join(", "), "warning"));
+  if (Array.isArray(item.confirmed) && item.confirmed.length) card.append(element("p", item.confirmed.join("; "), "facts"));
+  if (Array.isArray(item.unknown) && item.unknown.length) card.append(element("p", "Требует проверки: " + item.unknown.join(", "), "warning"));
   if (item.reason) {
     card.append(element("p", item.reason, "facts"));
     card.append(link("Основание рекомендации", item.source, "source"));
@@ -45,8 +47,9 @@ function product(item) {
     card.append(cited);
   }
   const foot = element("div", "", "foot");
-  const amount = item.price > 0 ?
-    new Intl.NumberFormat("ru-RU", {style:"currency", currency:item.currency === "RUR" ? "RUB" : (item.currency || "RUB"), maximumFractionDigits:0}).format(item.price) : "Цена по запросу";
+  const currency = String(item.currency || "").toUpperCase();
+  const amount = item.price > 0 && /^[A-Z]{3}$/.test(currency || "RUB") ?
+    new Intl.NumberFormat("ru-RU", {style:"currency", currency:currency === "RUR" ? "RUB" : (currency || "RUB"), maximumFractionDigits:0}).format(item.price) : "Цена по запросу";
   foot.append(element("strong", amount), link("Открыть в Softline", item.url));
   card.append(foot);
   if (!item.available) card.append(element("p", "Нет в наличии по данным каталога", "small"));
@@ -56,10 +59,26 @@ function product(item) {
 async function api(path, params={}, signal=undefined, options={}) {
   const url = new URL(path, window.location.origin);
   for (const [key,value] of Object.entries(params)) url.searchParams.set(key,value);
-  const response = await fetch(url, {...options, signal});
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Ошибка сервиса");
-  return data;
+  const controller = signal ? null : new AbortController();
+  const timer = controller && setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {...options, signal: signal || controller.signal});
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(typeof data?.error === "string" && data.error
+        ? data.error : "Сервис временно недоступен. Повторите запрос.");
+    }
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("Сервис вернул неполный ответ. Повторите запрос.");
+    }
+    return data;
+  } catch (error) {
+    if (controller?.signal.aborted) throw new Error("Время ожидания истекло. Повторите запрос.");
+    if (error instanceof TypeError) throw new Error("Не удалось связаться с сервисом. Повторите запрос.");
+    throw error;
+  } finally {
+    if (controller) clearTimeout(timer);
+  }
 }
 
 function clearResults() {
@@ -81,8 +100,12 @@ function showResults(data) {
   clearResults();
   byId("results").setAttribute("aria-busy", "false");
   const alternatives = data.alternatives || [];
-  byId("status").textContent = data.items.length ? data.items.length + " · " + data.elapsed_ms + " мс" : alternatives.length ? "Есть альтернатива" : data.status === "needs_clarification" ? "Нужно уточнение" : "Нет результатов";
-  const spelling = Object.entries(data.corrections);
+  const count = data.items.length;
+  const companions = data.recommendations.length;
+  const goods = count === 1 ? "Найден 1 товар" : "Найдено " + count + " товара";
+  const extras = companions === 1 ? " и 1 допродажа" : companions ? " и " + companions + " допродажи" : "";
+  byId("status").textContent = count ? goods + extras : alternatives.length ? "Есть альтернатива" : data.status === "needs_clarification" ? "Нужно уточнение" : "Нет результатов";
+  const spelling = Object.entries(data.corrections || {});
   if (spelling.length) byId("notice").append(element("p", spelling.map(([a,b])=>a+" → "+b).join(", "), "notice"));
   if (data.rewritten_to) byId("notice").append(element("p", "Уточнённый поиск · " + data.rewritten_to, "notice"));
   if (data.clarification) byId("notice").append(element("p", data.clarification, "notice"));
@@ -105,14 +128,19 @@ async function runSearch({writeRoute = true} = {}) {
   if (!value) return;
   const current = ++lastSearch;
   const profile = byId("buyer-context").value;
+  requestedSearch = {value, profile};
   if (writeRoute) setRoute({q: value, context: profile});
   byId("submit").disabled = true;
   showLoading();
   try {
     const data = await api("/api/search", profile ? {q:value, context:profile} : {q:value});
     if (current !== lastSearch) return;
+    const groups = [data.items, data.recommendations, data.alternatives ?? []];
+    if (!groups.every(group => Array.isArray(group) && group.every(item => typeof item?.name === "string"))) {
+      throw new Error("Сервис вернул неполный ответ. Повторите запрос.");
+    }
     showResults(data);
-    if (!byId("analytics").hidden) await renderAnalytics();
+    if (!byId("analytics").hidden) void renderAnalytics();
   } catch (error) {
     if (current === lastSearch) {
       clearResults();
@@ -187,6 +215,9 @@ async function renderAnalytics() {
   let data;
   try {
     data = await api("/api/analytics");
+    if (!data.statuses || !Number.isInteger(data.events)) {
+      throw new Error("Статистика временно недоступна.");
+    }
   } catch (error) {
     if (current === lastAnalytics) byId("stats").textContent = error.message;
     return;
@@ -195,7 +226,7 @@ async function renderAnalytics() {
   const labels = ["Запросов: "+data.events, "С 4 семействами: "+data.four_results,
     "Без результатов: "+(data.statuses.no_results || 0),
     "Требуют уточнения: "+(data.statuses.needs_clarification || 0),
-    "С рекомендациями: "+data.with_recommendations, "Среднее время: "+data.mean_ms+" мс"];
+    "С рекомендациями: "+data.with_recommendations, "Обработка на сервере: "+data.mean_ms+" мс в среднем"];
   byId("stats").replaceChildren(...labels.map(text => element("span", text)));
   byId("analytics-manager").hidden = !data.manager;
   if (data.manager) renderManager(data);
@@ -212,11 +243,12 @@ function renderManager(data) {
     const card = element("article", "", "proposal");
     const passed = proposal.report.regressions.filter(item => item.passed).length;
     const names = {pending: "На одобрении", approved: "Одобрено", failed: "Проверка не пройдена", stale: "Каталог изменился"};
+    const status = element("span", names[proposal.status] || proposal.status);
     card.append(
       element("strong", proposal.query + " → " + proposal.replacement),
       element("span", "Выдача " + proposal.report.before + " → " + proposal.report.after
         + " · регрессии " + passed + "/" + proposal.report.regressions.length),
-      element("span", names[proposal.status] || proposal.status),
+      status,
     );
     if (proposal.report.top.length) {
       const first = proposal.report.top[0];
@@ -232,6 +264,9 @@ function renderManager(data) {
             method: "POST", headers: {"Content-Type": "application/json"},
             body: JSON.stringify({id: proposal.id}),
           });
+          status.textContent = names.approved;
+          approve.hidden = true;
+          byId("manager-status").textContent = "Предложение одобрено.";
           await renderAnalytics();
         } catch (error) {
           byId("manager-status").textContent = error.message;
@@ -279,14 +314,19 @@ function setLayout(list) {
 function restoreRoute() {
   const {searchParams} = new URL(window.location.href);
   const context = searchParams.get("context") || "";
-  byId("buyer-context").value = ["windows-office", "windows-server"].includes(context) ? context : "";
-  query.value = (searchParams.get("q") || "").slice(0, 240);
+  const profile = ["windows-office", "windows-server"].includes(context) ? context : "";
+  const value = (searchParams.get("q") || "").slice(0, 240);
+  const sameSearch = value.trim() === requestedSearch?.value && profile === requestedSearch?.profile;
+  clearSuggestions();
+  byId("buyer-context").value = profile;
+  query.value = value;
   setLayout(searchParams.get("layout") === "list");
   showAnalytics(searchParams.get("view") === "analytics");
   if (query.value.trim()) {
-    runSearch({writeRoute: false});
+    if (!sameSearch) runSearch({writeRoute: false});
   } else {
     ++lastSearch;
+    requestedSearch = undefined;
     clearResults();
     byId("results").setAttribute("aria-busy", "false");
     byId("submit").disabled = false;
@@ -297,8 +337,9 @@ function restoreRoute() {
 byId("analytics-toggle").addEventListener("click", async () => {
   const open = byId("analytics").hidden;
   setRoute({view: open ? "analytics" : ""});
-  await showAnalytics(open);
-  if (open) byId("analytics").scrollIntoView?.({block: "nearest"});
+  const loaded = showAnalytics(open);
+  if (open) byId("analytics-title").focus?.();
+  await loaded;
 });
 
 byId("layout-toggle").addEventListener("click", () => {

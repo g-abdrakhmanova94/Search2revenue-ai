@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Поиск по каталогу Softline с подбором лицензий и проверенными допродажами.">
-<meta name="theme-color" content="#172923">
+<meta name="theme-color" content="#edf2f5">
 <title>Search2Revenue AI · Поиск по каталогу Softline</title>
 <link rel="stylesheet" href="style.css">
 <script src="app.js" defer></script>
@@ -35,9 +35,9 @@
 <div id="workspace" class="workspace" data-layout="columns">
 <aside class="search-options" aria-labelledby="options-title">
 <h2 id="options-title">Параметры поиска</h2>
-<label class="buyer-context" for="buyer-context">Демо-профиль
+<label class="buyer-context" for="buyer-context">Среда развёртывания
 <select id="buyer-context">
-<option value="">Без профиля</option>
+<option value="">Не указана</option>
 <option value="windows-office">Офис на Windows 11</option>
 <option value="windows-server">ИТ-отдел с Windows Server 2019 Standard (x64)</option>
 </select></label>
@@ -54,7 +54,7 @@
 </section>
 <aside id="extras" aria-label="Проверенные допродажи" hidden><h2>Проверенные допродажи</h2><div id="recommendations" class="cards"></div></aside>
 </div>
-<section id="analytics" aria-labelledby="analytics-title" hidden><h2 id="analytics-title">Аналитика поиска</h2><div id="stats"></div>
+<section id="analytics" aria-labelledby="analytics-title" hidden><h2 id="analytics-title" tabindex="-1">Аналитика поиска</h2><div id="stats" role="status"></div>
 <div id="analytics-manager" hidden>
 <div class="section-head"><h3>Неудачные запросы</h3><button id="analytics-refresh" type="button">Обновить</button></div>
 <ul id="issue-list" class="issue-list"></ul>

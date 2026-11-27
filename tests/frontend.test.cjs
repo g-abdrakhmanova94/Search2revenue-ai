@@ -39,8 +39,8 @@ function frontend(fetch = async () => { throw new Error("Unexpected fetch"); }) 
     },
     clearTimeout(id) { timers.delete(id); },
   });
-  vm.runInContext(script + "\nglobalThis.ui = { element, link, product, api, runSearch, renderAnalytics };", context);
-  return { ui: context.ui, get: id => document.getElementById(id), example, timers };
+  vm.runInContext(script + "\nglobalThis.ui = { element, link, product, api, runSearch, renderAnalytics, restoreRoute };", context);
+  return { ui: context.ui, get: id => document.getElementById(id), example, timers, location: context.window.location };
 }
 
 test("untrusted product text is rendered as text", () => {
@@ -141,8 +141,9 @@ test("a busy search can be retried and an analytics failure stays in its own pan
   assert.equal(get("status").textContent, "Поиск занят");
   assert.equal(get("submit").disabled, false);
   await ui.runSearch();
-  assert.equal(get("status").textContent, "1 · 10 мс");
+  assert.equal(get("status").textContent, "Найден 1 товар");
   assert.equal(get("products").children.length, 1);
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(get("stats").textContent, "Аналитика недоступна");
 });
 
@@ -157,8 +158,85 @@ test("analytics reports failed and clarification counts independently", async ()
   await ui.renderAnalytics();
   assert.deepEqual(get("stats").children.map(item => item.textContent), [
     "Запросов: 17", "С 4 семействами: 12", "Без результатов: 1", "Требуют уточнения: 2",
-    "С рекомендациями: 3", "Среднее время: 42 мс",
+    "С рекомендациями: 3", "Обработка на сервере: 42 мс в среднем",
   ]);
+});
+
+test("an HTML gateway failure preserves the query and offers a retry", async () => {
+  const {ui, get} = frontend(async () => ({
+    ok: false,
+    status: 502,
+    json: async () => { throw new SyntaxError("Unexpected token <"); },
+  }));
+  get("query").value = "Лицензия на 100 мест";
+  await ui.runSearch();
+  assert.equal(get("status").textContent, "Сервис временно недоступен. Повторите запрос.");
+  assert.equal(get("query").value, "Лицензия на 100 мест");
+  assert.equal(get("submit").disabled, false);
+});
+
+test("a stalled foreground request times out and clears its loading state", async () => {
+  const {ui, get, timers} = frontend(async (_url, {signal}) => new Promise((_, reject) => {
+    signal.addEventListener("abort", () => reject(new Error("Aborted")), {once: true});
+  }));
+  get("query").value = "Сервер";
+  const running = ui.runSearch();
+  assert.equal(get("submit").disabled, true);
+  const [{callback, delay}] = timers.values();
+  assert.equal(delay, 15000);
+  callback();
+  await running;
+  assert.equal(get("status").textContent, "Время ожидания истекло. Повторите запрос.");
+  assert.equal(get("submit").disabled, false);
+  assert.equal(get("results").attributes["aria-busy"], "false");
+});
+
+test("an incomplete search response leaves the form ready to retry", async () => {
+  for (const payload of [{items: []}, {items: [null], recommendations: []}]) {
+    const {ui, get} = frontend(async () => ({ok: true, json: async () => payload}));
+    get("query").value = "Astra Linux";
+    await ui.runSearch();
+    assert.equal(get("status").textContent, "Сервис вернул неполный ответ. Повторите запрос.");
+    assert.equal(get("submit").disabled, false);
+  }
+});
+
+test("back restores the search even when the unsent draft already matches the restored URL", async () => {
+  const pending = [];
+  const {ui, get, location} = frontend(url => new Promise(resolve => pending.push({url, resolve})));
+  get("query").value = "Office";
+  const old = ui.runSearch({writeRoute: false});
+  get("query").value = "Astra";
+  location.href = "http://localhost/?q=Astra";
+  ui.restoreRoute();
+  assert.deepEqual(pending.map(({url}) => url.searchParams.get("q")), ["Office", "Astra"]);
+  const reply = name => ({ok: true, json: async () => ({items: [{name}], recommendations: []})});
+  pending[1].resolve(reply("Astra"));
+  pending[0].resolve(reply("Office"));
+  await old;
+  assert.equal(get("products").children[0].children[1].textContent, "Astra");
+  location.href += "&layout=list";
+  ui.restoreRoute();
+  assert.equal(pending.length, 2);
+});
+
+test("pending analytics does not disable search or obscure the number of add-ons", async () => {
+  const card = {name: "Товар", confirmed: [], unknown: []};
+  let finishAnalytics;
+  const {ui, get} = frontend(async url => {
+    if (url.pathname === "/api/analytics") {
+      return new Promise(resolve => { finishAnalytics = resolve; });
+    }
+    return {ok: true, json: async () => ({
+      items: [card], recommendations: [card, card, card], corrections: {}, status: "ok",
+    })};
+  });
+  get("query").value = "Сервер";
+  get("analytics").hidden = false;
+  await ui.runSearch();
+  assert.equal(get("submit").disabled, false);
+  assert.equal(get("status").textContent, "Найден 1 товар и 3 допродажи");
+  finishAnalytics({ok: false, json: async () => ({error: "Временно недоступно"})});
 });
 
 
@@ -360,4 +438,30 @@ test("manager shows diagnostics and sends approval only on click", async () => {
   await card.children[3].listeners.click();
   assert.equal(approved, true);
   assert.equal(get("proposal-list").children[0].children[2].textContent, "Одобрено");
+});
+
+test("manager sees confirmed approval when the analytics refresh fails", async () => {
+  let approved = false;
+  const {ui, get} = frontend(async url => {
+    if (url.pathname === "/api/improvements/approve") {
+      approved = true;
+      return {ok: true, json: async () => ({approved: true})};
+    }
+    if (approved) return {ok: false, json: async () => ({error: "Статистика недоступна"})};
+    return {ok: true, json: async () => ({
+      manager: true, events: 1, four_results: 0, statuses: {}, issues: [],
+      proposals: [{
+        id: 7, query: "asrta", replacement: "astra", status: "pending",
+        report: {before: 0, after: 4, regressions: [], top: []},
+      }],
+    })};
+  });
+  await ui.renderAnalytics();
+  const card = get("proposal-list").children[0];
+  const approve = card.children[3];
+  await approve.listeners.click();
+  assert.equal(card.children[2].textContent, "Одобрено");
+  assert.equal(approve.hidden, true);
+  assert.equal(get("manager-status").textContent, "Предложение одобрено.");
+  assert.equal(get("stats").textContent, "Статистика недоступна");
 });
