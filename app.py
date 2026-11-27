@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from improvements import ImprovementQueue
 from recommendations import PROFILES, companion_items, preferred_platform
-from search import SearchEngine, parse_intent
+from search import SearchEngine, normalize, parse_intent
 from search_queue import SearchQueue
 
 ROOT = Path(__file__).resolve().parent
@@ -121,6 +121,43 @@ class Service:
             if item["available"] and item["price"] and not item["unknown"]
         ][:1]
 
+    def maxpatrol_alternative(self, query: str) -> list[dict]:
+        tokens, intent = parse_intent(query)
+        terms = set(tokens)
+        windows = intent["platform"]
+        quantity = intent["quantity"]
+        if (
+            not {"maxpatrol", "epp"} <= terms
+            or terms - {"maxpatrol", "epp", "endpoint", "protection", "platform"}
+            or intent["operation"] != "new"
+            or windows not in {"windows 10", "windows 11"}
+            or not quantity
+            or intent["delivery"]
+            or intent["excluded_editions"]
+            or intent["conflict"]
+        ):
+            return []
+        items = self.engine.search(
+            f"Kaspersky Endpoint Security для бизнеса Стандартный новая лицензия "
+            f"на {quantity} ПК для {windows}"
+        )["items"]
+        for item in items:
+            if (
+                item["available"]
+                and item["price"]
+                and not item["unknown"]
+                and "стандартный базовая лицензия"
+                in normalize(item["name"]).replace(",", "")
+            ):
+                return [
+                    dict(
+                        item,
+                        reason="Базовая защита рабочих станций Windows. Для перехода потребуется внедрение Kaspersky Security Center.",
+                        source="https://support.kaspersky.ru/KSC/13/ru-RU/209155.htm",
+                    )
+                ]
+        return []
+
     def search(self, query: str, *, record: bool = True, context: str = "") -> dict:
         start = time.perf_counter()
         replacement = (
@@ -166,6 +203,15 @@ class Service:
             and not result["intent"]["operation"]
         ):
             clarification = "Подбираете новую лицензию или продлеваете действующую?"
+        if (
+            not clarification
+            and products
+            and not result["intent"]["operation"]
+            and "maxpatrol endpoint protection platform"
+            in normalize(products[0]["name"])
+            and "тип лицензии: продление" in normalize(products[0]["description"])
+        ):
+            clarification = "В каталоге есть продление MaxPatrol EPP. Для новой покупки укажите ОС и количество устройств."
         status = (
             "needs_clarification"
             if clarification
@@ -178,6 +224,7 @@ class Service:
         alternatives = (
             self.office_alternative(terms[0], context)
             or self.anydesk_alternative(terms[0], context)
+            or self.maxpatrol_alternative(terms[0])
             if record and not products and not clarification
             else []
         )

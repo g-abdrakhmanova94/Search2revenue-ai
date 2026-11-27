@@ -96,7 +96,7 @@ ALIASES = {
 RENEW = re.compile(r"\b(?:renewal|renew|продлени[ея]|продлить|продляем)\b")
 NOT_RENEW = re.compile(r"\b(?:без|не)\s+(?:продлени[ея]|renewal)\b")
 NEW = re.compile(
-    r"\b(?:первичная|первичное|новая покупка|новая лицензия|новую лицензию|base license|new license)\b"
+    r"\b(?:первичная|первичное|новая покупка|новая лицензия|новую лицензию|базовая лицензия|base license|new license)\b"
 )
 NO_USB = re.compile(r"\b(?:без|не нужен|не нужна|не надо)\s+(?:usb|юсб|ключа|донгла)\b")
 WITH_USB = re.compile(r"\b(?:с|нужен|нужна)\s+(?:usb|юсб|донглом)\b")
@@ -227,6 +227,13 @@ def matches_purchase_prerequisite(query: str, title: str) -> bool:
 
 
 def matches_specialized_license(query: str, terms: set[str], title: str) -> bool:
+    if "maxpatrol" in terms:
+        named = set(words(title))
+        if "maxpatrol" not in named:
+            return False
+        if "endpoint protection platform" in title:
+            named.add("epp")
+        return ({"siem", "vm", "edr", "epp"} & terms) <= named
     if {"криптопро", "csp"} <= terms:
         return matches_csp_package(
             query, terms, title
@@ -949,6 +956,13 @@ class SearchEngine:
             clarification = (
                 "Нужна лицензия КриптоПро CSP для рабочего места или для сервера?"
             )
+        elif (
+            not main
+            and {"maxpatrol", "epp"} <= set(tokens)
+            and constraints["operation"] == "new"
+            and (not constraints["platform"] or not constraints["quantity"])
+        ):
+            clarification = "Для новой лицензии MaxPatrol EPP укажите ОС и количество устройств, чтобы проверить аналоги."
         elif (
             not main
             and "kaspersky" in tokens
