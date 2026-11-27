@@ -653,7 +653,43 @@ class SearchTest(unittest.TestCase):
     def test_explicit_license_quantity_not_filled_with_incompatible_products(self):
         result = self.service.search("Касперского расширенного продлить на 999 компов")
         self.assertEqual(result["items"], [])
-        self.assertEqual(result["status"], "no_results")
+        self.assertEqual(result["status"], "needs_clarification")
+        self.assertIn("999 устройств", result["clarification"])
+
+    def test_kaspersky_renewal_excludes_other_vendors_and_editions(self):
+        limits = (
+            '<param name="К-во узлов">500</param><param name="К-во узлов">999</param>'
+        )
+        service = self.make_service(
+            offer("501", "VK Tech Расширенный продление", "24", "VK", limits),
+            offer(
+                "502",
+                "Kaspersky Endpoint Security Стандартный продление",
+                "650",
+                "STD",
+                limits,
+            ),
+            offer(
+                "503",
+                "Kaspersky Endpoint Security Расширенный Плюс продление",
+                "650",
+                "PLUS",
+                limits,
+            ),
+            offer(
+                "504",
+                "Kaspersky Endpoint Security Расширенный продление",
+                "650",
+                "UNKNOWN",
+            ),
+        )
+        query = "Касперского расширенного продлить на 500 компов"
+        result = service.search(query)
+        self.assertEqual(result["items"], [])
+        self.assertEqual(result["recommendations"], [])
+        self.assertIn("500 устройств", result["clarification"])
+        plus = service.search("Касперского расширенного плюс продлить на 500 компов")
+        self.assertEqual([item["code"] for item in plus["items"]], ["PLUS"])
 
     def test_conflicting_license_requirements_prompt_for_clarification(self):
         examples = (

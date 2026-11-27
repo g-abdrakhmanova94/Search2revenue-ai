@@ -861,6 +861,16 @@ class SearchEngine:
         clarification = None
         main = items[0] if items else None
         if (
+            not main
+            and "kaspersky" in tokens
+            and constraints["operation"] == "renewal"
+            and constraints["quantity"]
+        ):
+            clarification = (
+                f"В каталоге не подтверждено продление Kaspersky на "
+                f"{constraints['quantity']} устройств. Укажите артикул действующей лицензии."
+            )
+        elif (
             constraints["operation"] == "renewal"
             and set(tokens) <= {"kaspersky"}
             and main
@@ -941,6 +951,13 @@ class SearchEngine:
             fit, confirmed, unknown = (
                 self._fit(row, constraints) if has_constraints else (True, [], [])
             )
+            if (
+                "kaspersky" in query_terms
+                and constraints["operation"] == "renewal"
+                and constraints["quantity"]
+                and unknown
+            ):
+                continue
             matches = sum(t in title_terms or t in identity_terms for t in tokens)
             if not fit or (
                 not role and not matches and not category_terms.intersection(tokens)
@@ -1089,6 +1106,16 @@ class SearchEngine:
     ) -> bool:
         if "anydesk" in terms and not matches_anydesk_package(terms, title_terms):
             return False
+        if "kaspersky" in terms:
+            if vendor_path != "kaspersky" and not title.startswith(
+                ("kaspersky ", "лаборатория касперского ")
+            ):
+                return False
+            if "расширенный" in terms and (
+                "расширенный" not in title_terms
+                or ("плюс" in title_terms) != ("плюс" in terms)
+            ):
+                return False
         server_brands = terms & {"dell", "hpe", "lenovo", "supermicro"}
         if (
             "сервер" in terms
