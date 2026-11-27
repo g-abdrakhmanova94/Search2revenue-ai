@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="SearchDefinitions" targetNamespace="https://search2revenue.193-8-112-239.sslip.io/bpmn">
+  <bpmn:message id="Query" name="Поисковый запрос"/>
+  <bpmn:message id="Result" name="Результаты или подсказка"/>
+  <bpmn:collaboration id="SearchCollaboration">
+    <bpmn:participant id="Buyer" name="Покупатель" processRef="BuyerProcess"/>
+    <bpmn:participant id="Service" name="Search2Revenue AI" processRef="ServiceProcess"/>
+    <bpmn:messageFlow id="QueryMessage" sourceRef="SubmitQuery" targetRef="ServiceStart" messageRef="Query"/>
+    <bpmn:messageFlow id="ResultMessage" sourceRef="SendResult" targetRef="ReceiveResult" messageRef="Result"/>
+  </bpmn:collaboration>
+  <bpmn:process id="BuyerProcess" isExecutable="false">
+    <bpmn:startEvent id="BuyerStart"/>
+    <bpmn:sendTask id="SubmitQuery" name="Отправить запрос" messageRef="Query"/>
+    <bpmn:receiveTask id="ReceiveResult" name="Получить ответ" messageRef="Result"/>
+    <bpmn:userTask id="ReadResult" name="Посмотреть результаты"/>
+    <bpmn:exclusiveGateway id="NextStep" name="Что дальше?" default="BuyerFinish"/>
+    <bpmn:userTask id="OpenOffer" name="Открыть карточку Softline"/>
+    <bpmn:endEvent id="BuyerEnd"/>
+    <bpmn:sequenceFlow id="BuyerBegin" sourceRef="BuyerStart" targetRef="SubmitQuery"/>
+    <bpmn:sequenceFlow id="WaitForResult" sourceRef="SubmitQuery" targetRef="ReceiveResult"/>
+    <bpmn:sequenceFlow id="InspectResult" sourceRef="ReceiveResult" targetRef="ReadResult"/>
+    <bpmn:sequenceFlow id="ChooseNext" sourceRef="ReadResult" targetRef="NextStep"/>
+    <bpmn:sequenceFlow id="Refine" name="Уточнить" sourceRef="NextStep" targetRef="SubmitQuery"/>
+    <bpmn:sequenceFlow id="SelectOffer" name="Выбран товар" sourceRef="NextStep" targetRef="OpenOffer"/>
+    <bpmn:sequenceFlow id="BuyerFinish" name="Завершить" sourceRef="NextStep" targetRef="BuyerEnd"/>
+    <bpmn:sequenceFlow id="OfferOpened" sourceRef="OpenOffer" targetRef="BuyerEnd"/>
+  </bpmn:process>
+  <bpmn:process id="ServiceProcess" isExecutable="false">
+    <bpmn:startEvent id="ServiceStart" name="Получен запрос">
+      <bpmn:messageEventDefinition messageRef="Query"/>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="SearchOffers" name="Подобрать товары и допродажи"/>
+    <bpmn:sendTask id="SendResult" name="Вернуть результаты или подсказку" messageRef="Result"/>
+    <bpmn:endEvent id="ServiceEnd"/>
+    <bpmn:sequenceFlow id="StartSearch" sourceRef="ServiceStart" targetRef="SearchOffers"/>
+    <bpmn:sequenceFlow id="PrepareResult" sourceRef="SearchOffers" targetRef="SendResult"/>
+    <bpmn:sequenceFlow id="FinishService" sourceRef="SendResult" targetRef="ServiceEnd"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="SearchDiagram">
+    <bpmndi:BPMNPlane id="SearchPlane" bpmnElement="SearchCollaboration">
+      <bpmndi:BPMNShape id="BuyerShape" bpmnElement="Buyer" isHorizontal="true"><dc:Bounds x="100" y="80" width="970" height="220"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceShape" bpmnElement="Service" isHorizontal="true"><dc:Bounds x="100" y="370" width="970" height="190"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BuyerStartShape" bpmnElement="BuyerStart"><dc:Bounds x="150" y="162" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SubmitQueryShape" bpmnElement="SubmitQuery"><dc:Bounds x="220" y="145" width="120" height="70"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ReceiveResultShape" bpmnElement="ReceiveResult"><dc:Bounds x="375" y="145" width="120" height="70"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ReadResultShape" bpmnElement="ReadResult"><dc:Bounds x="530" y="145" width="120" height="70"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="NextStepShape" bpmnElement="NextStep" isMarkerVisible="true">
+        <dc:Bounds x="690" y="155" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="685" y="213" width="65" height="15"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="OpenOfferShape" bpmnElement="OpenOffer"><dc:Bounds x="820" y="145" width="125" height="70"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BuyerEndShape" bpmnElement="BuyerEnd"><dc:Bounds x="985" y="162" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceStartShape" bpmnElement="ServiceStart"><dc:Bounds x="262" y="442" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SearchOffersShape" bpmnElement="SearchOffers"><dc:Bounds x="340" y="425" width="135" height="70"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SendResultShape" bpmnElement="SendResult"><dc:Bounds x="520" y="425" width="135" height="70"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ServiceEndShape" bpmnElement="ServiceEnd"><dc:Bounds x="700" y="442" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BuyerBeginEdge" bpmnElement="BuyerBegin"><di:waypoint x="186" y="180"/><di:waypoint x="220" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="WaitForResultEdge" bpmnElement="WaitForResult"><di:waypoint x="340" y="180"/><di:waypoint x="375" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="InspectResultEdge" bpmnElement="InspectResult"><di:waypoint x="495" y="180"/><di:waypoint x="530" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ChooseNextEdge" bpmnElement="ChooseNext"><di:waypoint x="650" y="180"/><di:waypoint x="690" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="RefineEdge" bpmnElement="Refine">
+        <di:waypoint x="715" y="155"/><di:waypoint x="715" y="113"/><di:waypoint x="280" y="113"/><di:waypoint x="280" y="145"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="484" y="96" width="50" height="15"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SelectOfferEdge" bpmnElement="SelectOffer">
+        <di:waypoint x="740" y="180"/><di:waypoint x="820" y="180"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="745" y="160" width="72" height="15"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BuyerFinishEdge" bpmnElement="BuyerFinish">
+        <di:waypoint x="715" y="205"/><di:waypoint x="715" y="255"/><di:waypoint x="1003" y="255"/><di:waypoint x="1003" y="198"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="827" y="237" width="60" height="15"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="OfferOpenedEdge" bpmnElement="OfferOpened"><di:waypoint x="945" y="180"/><di:waypoint x="985" y="180"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="StartSearchEdge" bpmnElement="StartSearch"><di:waypoint x="298" y="460"/><di:waypoint x="340" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="PrepareResultEdge" bpmnElement="PrepareResult"><di:waypoint x="475" y="460"/><di:waypoint x="520" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="FinishServiceEdge" bpmnElement="FinishService"><di:waypoint x="655" y="460"/><di:waypoint x="700" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="QueryMessageEdge" bpmnElement="QueryMessage"><di:waypoint x="280" y="215"/><di:waypoint x="280" y="442"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ResultMessageEdge" bpmnElement="ResultMessage"><di:waypoint x="587" y="425"/><di:waypoint x="587" y="333"/><di:waypoint x="435" y="333"/><di:waypoint x="435" y="215"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
