@@ -424,12 +424,17 @@ def main() -> None:
     a = p.parse_args()
     if not a.db.is_file():
         p.error("Catalog index missing. Run ingest.py first.")
+    engine = SearchEngine(a.db)
+    try:
+        engine.verify_catalog()
+    except sqlite3.DatabaseError as error:
+        p.error(f"Catalog index is unusable. Rebuild it with ingest.py. {error}")
     manager_enabled = (
         a.host in {"127.0.0.1", "localhost", "::1"}
         and os.getenv("SEARCH_MANAGER", "local") != "off"
     )
     service = Service(
-        SearchEngine(a.db),
+        engine,
         a.events,
         log_diagnostics=manager_enabled,
         snapshot_cache=a.snapshot_cache,

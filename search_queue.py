@@ -1,18 +1,18 @@
 """Bound the number of running and waiting searches."""
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from threading import BoundedSemaphore
 
 
 class SearchQueue:
-    def __init__(self, workers: int = 4, waiting: int = 12, wait_seconds: float = 6):
+    def __init__(self, workers: int = 4, waiting: int = 28, wait_seconds: float = 6):
         self._workers = BoundedSemaphore(workers)
         self._admission = BoundedSemaphore(workers + waiting)
         self._wait_seconds = wait_seconds
 
     @contextmanager
-    def slot(self) -> Iterator[bool]:
+    def slot(self) -> Generator[bool, None, None]:
         admitted = self._admission.acquire(blocking=False)
         if not admitted:
             yield False

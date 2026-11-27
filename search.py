@@ -536,6 +536,18 @@ class SearchEngine:
         db.row_factory = sqlite3.Row
         return db
 
+    def verify_catalog(self) -> None:
+        with closing(self.connect()) as db:
+            if db.execute("SELECT sku FROM products LIMIT 1").fetchone() is None:
+                raise sqlite3.DatabaseError("Catalog has no products.")
+            db.execute("SELECT term FROM vocabulary LIMIT 1").fetchone()
+            db.execute(
+                "SELECT rowid FROM catalog WHERE catalog MATCH 'readiness' LIMIT 1"
+            ).fetchone()
+            db.execute(
+                "SELECT name FROM title_trigrams WHERE title_trigrams MATCH 'readiness' LIMIT 1"
+            ).fetchone()
+
     @staticmethod
     def _correct(db: sqlite3.Connection, tokens: list[str]) -> dict[str, str]:
         corrected = {}

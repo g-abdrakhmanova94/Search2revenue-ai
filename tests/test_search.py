@@ -615,6 +615,16 @@ class SearchTest(unittest.TestCase):
                 )["items"]
                 self.assertEqual([x["code"] for x in items], [expected])
 
+    def test_catalog_verification_requires_search_indexes(self):
+        self.engine.verify_catalog()
+        incomplete = Path(self.tmp.name) / "incomplete-catalog.sqlite"
+        with closing(sqlite3.connect(incomplete)) as db, db:
+            db.execute("CREATE TABLE products (sku TEXT)")
+            db.execute("INSERT INTO products VALUES ('1')")
+            db.execute("CREATE TABLE vocabulary (term TEXT)")
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "no such table: catalog"):
+            SearchEngine(incomplete).verify_catalog()
+
     def test_no_usb_rejects_physical_key_even_when_delivery_is_electronic(self):
         items = self.engine.search("1С Автотранспорт Проф на 20 мест без USB")["items"]
         self.assertEqual([x["code"] for x in items], ["ESD20"])
