@@ -23,6 +23,7 @@ from recommendations import (
     MAXPATROL_INTEGRATIONS,
     PROFILES,
     companion_items,
+    maxpatrol_catalog_match,
     preferred_platform,
     related_searches,
 )
@@ -199,6 +200,17 @@ class Service:
             preferred_platform=preferred_platform(query, context),
         )
         products = result["items"]
+        quote = maxpatrol_catalog_match(terms[0])
+        if quote and not result["clarification"]:
+            product_name = normalize(quote[0]["name"])
+            products = [
+                item
+                for item in products
+                if normalize(item["vendor"]) == "positive technologies"
+                and product_name
+                in normalize(item["name"]).replace("max patrol", "maxpatrol")
+            ] or quote
+            result["failure_reason"] = None
         requested = terms[1] if len(terms) > 1 else ""
         slots = 2 if requested and len(products) >= 2 else 4 - len(products)
         extra = (

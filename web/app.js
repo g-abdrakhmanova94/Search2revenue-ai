@@ -50,9 +50,10 @@ function product(item) {
   const currency = String(item.currency || "").toUpperCase();
   const amount = item.price > 0 && /^[A-Z]{3}$/.test(currency || "RUB") ?
     new Intl.NumberFormat("ru-RU", {style:"currency", currency:currency === "RUR" ? "RUB" : (currency || "RUB"), maximumFractionDigits:0}).format(item.price) : "Цена по запросу";
-  foot.append(element("strong", amount), link("Открыть в Softline", item.url));
+  foot.append(element("strong", amount), link(item.quote_only ? "Запросить цену в Softline" : "Открыть в Softline", item.url));
   card.append(foot);
-  if (!item.available) card.append(element("p", "Нет в наличии по данным каталога", "small"));
+  if (item.quote_only) card.append(element("p", "Редакцию и условия поставки уточняет Softline.", "small"));
+  else if (!item.available) card.append(element("p", "Нет в наличии по данным каталога", "small"));
   return card;
 }
 

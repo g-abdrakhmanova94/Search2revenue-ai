@@ -30,6 +30,7 @@ CSP_COMPANIONS = (
     CSP_HARDWARE,
 )
 MAXPATROL = "Positive Technologies MaxPatrol Endpoint Protection Platform"
+MAXPATROL_QUOTES = ("MaxPatrol SIEM", "MaxPatrol VM", "PT Sandbox")
 ENDPOINT_ALTERNATIVE = (
     "Kaspersky Endpoint Security для бизнеса Стандартный базовая лицензия"
 )
@@ -126,10 +127,11 @@ CASES = (
         alternatives=("Microsoft Office для дома и бизнеса 2024",),
     ),
     Case("Microsoft Office 2021 для дома и бизнеса для Linux"),
-    Case("max patrol", direct=(MAXPATROL,)),
+    Case("max patrol", direct=(MAXPATROL,), companions=MAXPATROL_QUOTES),
     Case("MaxPatrol EPP продление", direct=(MAXPATROL,)),
-    Case("MaxPatrol SIEM"),
-    Case("MaxPatrol VM"),
+    Case("MaxPatrol SIEM", direct=("MaxPatrol SIEM",)),
+    Case("MaxPatrol VM", direct=("MaxPatrol VM",)),
+    Case("PT Sandbox", direct=("PT Sandbox",)),
     Case(
         "MaxPatrol EPP новая лицензия на 150 ПК для Windows 11",
         alternatives=(ENDPOINT_ALTERNATIVE,),

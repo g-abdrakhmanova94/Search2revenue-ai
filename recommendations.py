@@ -41,6 +41,23 @@ ALT_RELEASE_SOURCE = "https://cve.basealt.ru/report-24032025-c10f2-c10f1-special
 SCANNER_WSL_SOURCE = "https://docs.etecs.ru/scanner/docs/7.0/getting-started/installation/windows-wsl-install/"
 MTS_LINK_HARDWARE_SOURCE = "https://help.mts-link.ru/article/19765"
 MAXPATROL_INTEGRATIONS = "https://global.ptsecurity.com/en/products/endpoint/"
+MAXPATROL_CATALOG_PAGES = {
+    ("maxpatrol", "siem"): (
+        "MaxPatrol SIEM",
+        "maxpatrol-siem",
+        "Для объединения событий защиты в одной системе мониторинга.",
+    ),
+    ("maxpatrol", "vm"): (
+        "MaxPatrol VM",
+        "max-patrol-vm",
+        "Для инвентаризации активов и оценки уязвимостей по данным агента.",
+    ),
+    ("pt", "sandbox"): (
+        "PT Sandbox",
+        "pt-sandbox",
+        "Для анализа подозрительных файлов, которые передаёт агент защиты.",
+    ),
+}
 EXISTING_ANTIVIRUS = re.compile(
     r"\b(?:антивирус\s+уже\s+есть|уже\s+есть\s+антивирус|антивирус\s+установлен)\b",
     re.IGNORECASE,
@@ -550,6 +567,55 @@ def related_searches(query: str) -> tuple[str, ...]:
     return () if any(constraints.values()) else RELATED_SEARCHES.get(tuple(tokens), ())
 
 
+def maxpatrol_catalog_card(
+    page: tuple[str, str, str], *, companion: bool = False
+) -> dict:
+    name, slug, purpose = page
+    path = f"/positive-technologies/{slug}"
+    url = f"https://store.softline.ru{path}/"
+    evidence = [catalog_evidence("условия покупки", "Цена по запросу", url)]
+    if companion:
+        evidence.append(
+            {
+                "kind": "vendor",
+                "field": "MaxPatrol Endpoint Security · интеграции",
+                "value": f"{name} указан в документации платформы. Нужны подходящие версия агента и лицензия.",
+                "url": MAXPATROL_INTEGRATIONS,
+            }
+        )
+    return {
+        "name": name,
+        "sku": "",
+        "code": "",
+        "group": f"softline:{slug}",
+        "family_url": path,
+        "vendor": "Positive Technologies",
+        "category": "Информационная безопасность",
+        "category_id": "",
+        "url": url,
+        "available": False,
+        "quote_only": True,
+        "price": None,
+        "old_price": None,
+        "currency": "RUB",
+        "description": "" if companion else purpose,
+        "platform": "",
+        "reason": purpose if companion else "",
+        "source": MAXPATROL_INTEGRATIONS if companion else url,
+        "confirmed": [],
+        "unknown": [],
+        "evidence": evidence,
+    }
+
+
+def maxpatrol_catalog_match(query: str) -> list[dict]:
+    tokens, constraints = parse_intent(query)
+    page = MAXPATROL_CATALOG_PAGES.get(tuple(tokens))
+    return (
+        [maxpatrol_catalog_card(page)] if page and not any(constraints.values()) else []
+    )
+
+
 def workstation_primary_evidence(primary: dict) -> dict[str, str]:
     office = office_2024_source(primary)
     if office:
@@ -733,6 +799,16 @@ def companion_items(
     if not direct:
         return []
     primary = direct[0]
+    if (
+        not requested
+        and normalize(primary["vendor"]) == "positive technologies"
+        and "maxpatrol endpoint protection platform" in normalize(primary["name"])
+        and related_searches(query) == MAXPATROL_REFINEMENTS
+    ):
+        return [
+            maxpatrol_catalog_card(page, companion=True)
+            for page in MAXPATROL_CATALOG_PAGES.values()
+        ][:limit]
     constraints = parse_intent(requested)[1]
     if constraints["conflict"]:
         return []

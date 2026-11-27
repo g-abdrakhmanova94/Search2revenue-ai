@@ -92,6 +92,10 @@ test("product separates confirmed and unverified terms and labels unavailable pr
   });
   assert.equal(minimal.children.length, 3);
   assert.match(minimal.children[2].children[0].textContent, /25.*₽/);
+  const quote = ui.product({name: "MaxPatrol SIEM", price: null, available: false, quote_only: true, url: item.url});
+  assert.equal(quote.children[2].children[0].textContent, "Цена по запросу");
+  assert.equal(quote.children[2].children[1].textContent, "Запросить цену в Softline");
+  assert.equal(quote.children[3].textContent, "Редакцию и условия поставки уточняет Softline.");
 });
 
 test("clarification and rejected requests keep the search form usable", async () => {
