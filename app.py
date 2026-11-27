@@ -189,7 +189,7 @@ class Service:
             companion_items(
                 self.engine, products, query, requested, context, limit=slots
             )
-            if record and slots > 0
+            if record and slots > 0 and not result["intent"].get("local_only")
             else []
         )
         products = products[: 4 - len(extra)]
@@ -242,7 +242,7 @@ class Service:
         result = self.search(query, record=False, context=context)
         products = result["items"]
         result["companion_preview"] = None
-        if len(query) >= 6 and products:
+        if len(query) >= 6 and products and not result["intent"].get("local_only"):
             terms = COMBINED.split(query, maxsplit=1)
             requested = terms[1] if len(terms) == 2 else ""
             candidates = companion_items(

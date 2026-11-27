@@ -99,6 +99,14 @@ NEW = re.compile(
     r"\b(?:первичная|первичное|новая покупка|новая лицензия|новую лицензию|базовая лицензия|base license|new license)\b"
 )
 NO_USB = re.compile(r"\b(?:без|не нужен|не нужна|не надо)\s+(?:usb|юсб|ключа|донгла)\b")
+NO_CLOUD = re.compile(
+    r"\b(?:без\s+(?:облака|cloud|saas)|без\s+облачн\w*\s+(?:верси\w*|сервис\w*|подписк\w*)|"
+    r"не\s*облачн\w*(?:\s+верси\w*)?|не\s+в\s+облаке)\b"
+)
+LOCAL_DEPLOYMENT = re.compile(
+    r"\b(?:on[- ]prem(?:ises?)?|локальн(?:ая версия|ое развертывание))\b"
+)
+CLOUD_DEPLOYMENT = re.compile(r"\b(?:saas|cloud|облачн\w*)\b")
 WITH_USB = re.compile(r"\b(?:с|нужен|нужна)\s+(?:usb|юсб|донглом)\b")
 USB = re.compile(r"\b(?:usb|юсб|донгл)\b")
 ELECTRONIC = re.compile(r"\b(?:электронн\w*|esd)\b")
@@ -123,6 +131,11 @@ CSP_VERSION_OFFER = re.compile(r"\bcsp\s+(?:версии\s+)?([45])\.(\d+)\b")
 CSP_WORKPLACE = re.compile(r"\bрабоч\w*\s+(?:мест\w*|станци\w*)\b")
 CSP_SERVER = re.compile(r"\b(?:сервер\w*|server)\b")
 CSP_NO_SERVER = re.compile(r"\b(?:без|не для)\s+(?:сервер\w*|server)\b")
+INFERIT_SERVER_MODEL = re.compile(r"\bсервер inferit (rs\d+)\b")
+SERVER_SOFTWARE_QUERY = re.compile(
+    r"(?:по|программ[аы]|программное\s+обеспечение|софт)\s+"
+    r"(?:для\s+(?:установки\s+на\s+)?|на\s+)сервер(?:а)?[.!?]?"
+)
 SCANNER_EXTRA_IP = re.compile(r"\b(?:дополнительн\w*\s+ip|additional ip)\b")
 ACADEMIC_AUDIENCE = re.compile(r"академ|образовательн|учебн|школ|университет|\bвуз")
 EXCLUDED_EDITION = re.compile(
@@ -317,6 +330,7 @@ def parse_intent(query: str) -> tuple[list[str], dict]:
     for pattern in (
         QUANTITY,
         NO_USB,
+        NO_CLOUD,
         WITH_USB,
         NOT_RENEW,
         RENEW,
@@ -340,12 +354,14 @@ def parse_intent(query: str) -> tuple[list[str], dict]:
         "conflict": conflict,
         "platform": next(iter(platforms)) if len(platforms) == 1 else None,
         "excluded_editions": sorted(excluded),
+        "local_only": bool(NO_CLOUD.search(text)),
     }
 
 
 ROLE_SEARCH = {
     "rack_server": ["сервер", "rack"],
     "server_hardware": ["сервер"],
+    "server_software": ["серверное", "по", "server"],
     "ssd": ["ssd"],
     "external_ssd": ["внешние", "ssd"],
     "tablet": ["планшет", "samsung"],
@@ -407,9 +423,19 @@ def software_role(terms: set[str]) -> str | None:
     return "office_home_business" if home_business else "office_suite"
 
 
-def product_role(tokens: list[str]) -> str | None:
+def product_role(tokens: list[str], query: str) -> str | None:
     terms = set(tokens)
-    if "сервер" in terms and terms & {"стоечный", "стоечные", "rack"}:
+    if "windows" in terms and terms <= {"10", "11", "windows"}:
+        return "windows_os"
+    if SERVER_SOFTWARE_QUERY.fullmatch(normalize(query)):
+        return "server_software"
+    if "сервер" in terms and terms & {
+        "стоечный",
+        "стоечные",
+        "стойке",
+        "стойку",
+        "rack",
+    }:
         return "rack_server"
     server_vendors = {"dell", "hpe", "lenovo", "supermicro"}
     if "сервер" in terms and (
@@ -448,6 +474,15 @@ def fits_product_role(
             and ("сервер" in title or "server" in title)
             and not {"по", "аксессуары", "комплектующие"} & set(words(category))
         )
+    if role == "server_software":
+        return not title.startswith(("модуль ", "дополнительный модуль ")) and (
+            category == "серверное по"
+            or ("операционн" in category and bool(CSP_SERVER.search(title)))
+        )
+    if role == "windows_os":
+        return bool(
+            re.match(r"(?:microsoft )?windows\s+(?:7|8|10|11|vista|xp)\b", title)
+        ) and ("операционн" in category or category.startswith("windows 11: лицензии"))
     if role == "external_ssd":
         return "внешн" in category and "ssd" in category and "ssd" in title
     if role == "tablet":
@@ -566,6 +601,8 @@ def license_evidence(
         evidence = platform_evidence(row, constraints["platform"])
         if evidence:
             result.append(evidence)
+    if constraints.get("local_only"):
+        result.append(catalog_evidence("name", title, row["url"]))
     if "Тип покупки подтверждён каталогом" in confirmed:
         pattern = RENEW if constraints["operation"] == "renewal" else NEW
         hit = next(
@@ -702,6 +739,17 @@ class SearchEngine:
     def _retrieve_candidates(
         self, db: sqlite3.Connection, tokens: list[str], clean: str, role: str | None
     ) -> list[sqlite3.Row]:
+        if role == "windows_os":
+            title_terms = " ".join(["windows", *sorted(set(tokens) & {"10", "11"})])
+            return db.execute(
+                """SELECT p.*, bm25(catalog, ?, ?, ?, ?, ?) AS lexical
+                   FROM catalog JOIN products p ON p.rowid=catalog.rowid
+                   WHERE catalog MATCH ?
+                     AND (p.category LIKE '%перационн%' OR p.category LIKE 'Windows 11:%')
+                   ORDER BY (p.available AND coalesce(p.price, 0) > 0) DESC, lexical
+                   LIMIT 230""",
+                (*RANK_COLUMNS, f"name : {quote(title_terms)}"),
+            ).fetchall()
         if "anydesk" in tokens:
             return db.execute(
                 """SELECT p.*, bm25(catalog, ?, ?, ?, ?, ?) AS lexical
@@ -744,11 +792,18 @@ class SearchEngine:
 
     @staticmethod
     def _fit(row: sqlite3.Row, constraints: dict) -> tuple[bool, list[str], list[str]]:
-        if not matches_explicit_requirements(row, normalize(row["name"]), constraints):
+        title = normalize(row["name"])
+        if not matches_explicit_requirements(row, title, constraints):
+            return False, [], []
+        if constraints.get("local_only") and (
+            not LOCAL_DEPLOYMENT.search(title) or CLOUD_DEPLOYMENT.search(title)
+        ):
             return False, [], []
         matched, confirmed, unknown = SearchEngine._license_fit(row, constraints)
         if matched and constraints.get("platform"):
             confirmed.append("Операционная система подтверждена")
+        if matched and constraints.get("local_only"):
+            confirmed.append("Локальная редакция указана в названии товара")
         return matched, confirmed, unknown
 
     @staticmethod
@@ -930,7 +985,7 @@ class SearchEngine:
                 }
             corrections = self._correct(db, tokens)
             tokens = list(dict.fromkeys(corrections.get(t, t) for t in tokens))
-            role = product_role(tokens)
+            role = product_role(tokens, clean)
             rows = self._retrieve_candidates(db, tokens, clean, role)
             wants_astra_os = {"astra", "linux"}.issubset(tokens) and not (
                 ASTRA_COMPATIBILITY_INTENTS & set(tokens)
@@ -951,13 +1006,15 @@ class SearchEngine:
         weighted = self._rank(
             rows, rank_query, tokens, constraints, wants_astra_os, role
         )
-        items = self._top_items(weighted, limit, constraints, preferred_platform)
+        items = self._top_items(weighted, limit, constraints, preferred_platform, role)
         clarification = None
         main = items[0] if items else None
         if csp and main and not scope and not constraints["operation"]:
             clarification = (
                 "Нужна лицензия КриптоПро CSP для рабочего места или для сервера?"
             )
+        elif not main and constraints["local_only"]:
+            clarification = "В каталоге не подтверждена локальная редакция. Укажите точное название или артикул."
         elif (
             not main
             and {"maxpatrol", "epp"} <= set(tokens)
@@ -1047,6 +1104,8 @@ class SearchEngine:
             if not matches_specialized_license(normalized_query, query_terms, title):
                 continue
             if not fits_product_role(role, row, title, category, office_years):
+                continue
+            if role == "windows_os" and not (query_terms & {"10", "11"}) <= head_terms:
                 continue
             if (
                 role == "external_ssd"
@@ -1265,8 +1324,11 @@ class SearchEngine:
         limit: int,
         constraints: dict,
         preferred_platform: str = "",
+        role: str | None = None,
     ) -> list[dict]:
         items, seen = [], set()
+        seen_models: set[str] = set()
+        hardware = role in {"rack_server", "server_hardware"}
         preference = (
             re.compile(rf"\b{re.escape(preferred_platform)}\b", re.IGNORECASE)
             if preferred_platform
@@ -1294,6 +1356,13 @@ class SearchEngine:
                 break
             if row["group_id"] in seen:
                 continue
+            if hardware:
+                title = normalize(row["name"])
+                model = INFERIT_SERVER_MODEL.search(title)
+                model_key = f"inferit:{model[1]}" if model else title
+                if model_key in seen_models:
+                    continue
+                seen_models.add(model_key)
             seen.add(row["group_id"])
             items.append(self._item(row, confirmed, unknown, constraints))
             if len(items) == limit:

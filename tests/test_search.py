@@ -14,7 +14,7 @@ from defusedxml.common import DTDForbidden
 from app import Service, handler
 from evaluate import cases, family_groups, workbook_xml
 from ingest import build
-from search import SearchEngine, parse_intent, quantity_evidence
+from search import SearchEngine, parse_intent, product_role, quantity_evidence
 from search_queue import SearchQueue
 
 FEED = """<?xml version="1.0" encoding="utf-8"?>
@@ -657,6 +657,77 @@ class SearchTest(unittest.TestCase):
         self.assertEqual(
             [x["code"] for x in self.engine.search("сервак")["items"]], ["RACK"]
         )
+
+    def test_server_configurations_of_the_same_model_share_one_place(self):
+        service = self.make_service(
+            offer(
+                "1", "Сервер INFERIT RS108 R1G2D24/2x16GB", "20", "RS108A", group="11"
+            ),
+            offer(
+                "2", "Сервер INFERIT RS108 R1G2D24/4x16GB", "20", "RS108B", group="12"
+            ),
+            offer(
+                "3", "Сервер INFERIT RS110 R1G2D24/2x16GB", "20", "RS110A", group="13"
+            ),
+        )
+        codes = [item["code"] for item in service.engine.search("сервак")["items"]]
+        self.assertEqual(len(codes), 2)
+        self.assertIn("RS110A", codes)
+
+    def test_identical_server_models_with_distinct_offer_ids_share_one_place(self):
+        service = self.make_service(
+            offer("1", "Rack-сервер DEPO Storm 3470S2A", "20", "DEPO1", group="11"),
+            offer("2", "Rack-сервер DEPO Storm 3470S2A", "20", "DEPO2", group="12"),
+            offer("3", "Rack-сервер DEPO Storm 3470G2A", "20", "DEPO3", group="13"),
+        )
+        items = service.engine.search("сервер для установки в стойку")["items"]
+        self.assertEqual(len(items), 2)
+        self.assertIn("DEPO3", [item["code"] for item in items])
+
+    def test_server_software_does_not_return_hardware_or_training(self):
+        service = self.make_service(
+            offer("1", "Сервер PRO Rack R2", "20", "RACK"),
+            offer("2", "Сервер лицензий, ПО на сервер", "21", "SOFT"),
+            offer("3", "Учебный курс по установке на сервер", "2942", "COURSE"),
+            offer("4", "UBLinux Server", "22", "SERVEROS"),
+        )
+        items = service.engine.search("ПО для установки на сервер")["items"]
+        self.assertEqual({item["code"] for item in items}, {"SOFT", "SERVEROS"})
+        items = service.engine.search("сервер для установки в стойку")["items"]
+        self.assertEqual([item["code"] for item in items], ["RACK"])
+        named = "КриптоПро CSP для установки на сервер"
+        self.assertIsNone(product_role(parse_intent(named)[0], named))
+
+    def test_windows_slang_targets_operating_system_and_version(self):
+        service = self.make_service(
+            offer("1", "Microsoft Windows 11 Pro", "22", "WIN11"),
+            offer("2", "Microsoft Windows 10 Pro", "22", "WIN10"),
+            offer("3", "Редактор видео для Windows 11", "2942", "EDITOR"),
+        )
+        items = service.engine.search("винда")["items"]
+        self.assertEqual({item["code"] for item in items}, {"WIN10", "WIN11"})
+        items = service.engine.search("винда 11")["items"]
+        self.assertEqual([item["code"] for item in items], ["WIN11"])
+
+    def test_no_cloud_requires_proof_of_a_local_edition(self):
+        service = self.make_service(
+            offer("1", "Example Suite, локальная версия", "24", "LOCAL"),
+            offer("2", "Example Suite Cloud", "24", "CLOUD"),
+            offer("3", "Example Suite", "24", "UNKNOWN"),
+            offer("4", "Microsoft 365 Персональный", "24", "M365"),
+        )
+        chosen = service.search("Example Suite без облака", record=False)
+        self.assertEqual([item["code"] for item in chosen["items"]], ["LOCAL"])
+        self.assertEqual(chosen["items"][0]["evidence"][0]["field"], "name")
+        for query in (
+            "не облачная версия Microsoft 365",
+            "Microsoft 365 без облачной подписки",
+            "Microsoft 365 без Cloud",
+        ):
+            with self.subTest(query=query):
+                unresolved = service.search(query, record=False)
+                self.assertEqual(unresolved["status"], "needs_clarification")
+                self.assertEqual(unresolved["items"], [])
 
     def test_external_ssd_accepts_vendor_verified_code_and_rejects_hdd(self):
         service = self.make_service(
