@@ -299,6 +299,11 @@ def specialized_package_penalty(query: str, terms: set[str], title: str) -> int:
     return 0
 
 
+def has_purchase_constraints(constraints: dict) -> bool:
+    # alias_notes только поясняют переименование («max patrol → maxpatrol»), условием покупки не являются.
+    return any(value for key, value in constraints.items() if key != "alias_notes")
+
+
 def parse_intent(query: str) -> tuple[list[str], dict]:
     text = normalize(query)
     renewal = bool(RENEW.search(NOT_RENEW.sub(" ", text)))
@@ -950,7 +955,7 @@ class SearchEngine:
         clean = query.strip()[:240]
         tokens, constraints = parse_intent(clean)
         corrections: dict[str, str] = {}
-        rewritten_to = rewrite if rewrite and not any(constraints.values()) else None
+        rewritten_to = rewrite if rewrite and not has_purchase_constraints(constraints) else None
         if rewritten_to:
             tokens, _ = parse_intent(rewritten_to)
         with closing(self.connect()) as db:
@@ -1073,7 +1078,7 @@ class SearchEngine:
             return "no_catalog_match"
         return (
             "constraints_filtered"
-            if any(constraints.values())
+            if has_purchase_constraints(constraints)
             else "irrelevant_matches"
         )
 
@@ -1093,7 +1098,7 @@ class SearchEngine:
         office_years = OFFICE_YEARS & query_terms
         phrase_trigrams = trigrams(phrase)
         trigram_count = max(1, len(phrase_trigrams))
-        has_constraints = any(constraints.values())
+        has_constraints = has_purchase_constraints(constraints)
         pc_quantity = bool(re.search(r"\b\d+\s*(?:пк|комп\w*)\b", normalize(clean)))
         for row in rows:
             name, category_label = catalog_identity(row)

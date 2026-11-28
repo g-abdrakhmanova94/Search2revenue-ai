@@ -13,6 +13,7 @@ from search import (
     SearchEngine,
     catalog_evidence,
     csp_scope,
+    has_purchase_constraints,
     normalize,
     parse_intent,
     platform_text,
@@ -564,7 +565,7 @@ RELATED_SEARCHES = {
 
 def related_searches(query: str) -> tuple[str, ...]:
     tokens, constraints = parse_intent(query)
-    return () if any(constraints.values()) else RELATED_SEARCHES.get(tuple(tokens), ())
+    return () if has_purchase_constraints(constraints) else RELATED_SEARCHES.get(tuple(tokens), ())
 
 
 def maxpatrol_catalog_card(
@@ -612,7 +613,7 @@ def maxpatrol_catalog_match(query: str) -> list[dict]:
     tokens, constraints = parse_intent(query)
     page = MAXPATROL_CATALOG_PAGES.get(tuple(tokens))
     return (
-        [maxpatrol_catalog_card(page)] if page and not any(constraints.values()) else []
+        [maxpatrol_catalog_card(page)] if page and not has_purchase_constraints(constraints) else []
     )
 
 

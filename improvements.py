@@ -10,7 +10,7 @@ from contextlib import closing
 from pathlib import Path
 from threading import Lock
 
-from search import SearchEngine, normalize, parse_intent, words
+from search import SearchEngine, has_purchase_constraints, normalize, parse_intent, words
 
 REASONS = {
     "missing_product": "В запросе не распознано название или тип товара",
@@ -114,7 +114,7 @@ class ImprovementQueue:
     def _suggest(self, query: str) -> str | None:
         tokens, constraints = parse_intent(query)
         clean_words = words(query)
-        if not tokens or len(tokens) > 8 or any(constraints.values()):
+        if not tokens or len(tokens) > 8 or has_purchase_constraints(constraints):
             return None
         with closing(self.engine.connect()) as db:
             unfamiliar = [
