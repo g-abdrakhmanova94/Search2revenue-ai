@@ -257,6 +257,8 @@ components:
         corrections:
           type: object
           additionalProperties: { type: string }
+          description: Пояснения замен в запросе. Синоним из словаря показывается как есть (например, `сервак: сервер`). Опечатка (например, `asrta: astra`) попадает сюда только после одобрения предложения менеджером.
+          example: { сервак: сервер }
         intent: { $ref: "#/components/schemas/Intent" }
         clarification: { type: [string, "null"] }
         failure_reason:

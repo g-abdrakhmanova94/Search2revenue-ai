@@ -339,7 +339,12 @@ def parse_intent(query: str) -> tuple[list[str], dict]:
         EXCLUDED_EDITION,
     ):
         stripped = pattern.sub(" ", stripped)
-    expanded = ALIAS_RE.sub(lambda m: ALIASES[m.group()], stripped)
+    alias_notes = {}
+    def _expand(match):
+        src = match.group()
+        alias_notes.setdefault(src, ALIASES[src])
+        return ALIASES[src]
+    expanded = ALIAS_RE.sub(_expand, stripped)
     tokens = list(
         dict.fromkeys(
             t
@@ -355,6 +360,7 @@ def parse_intent(query: str) -> tuple[list[str], dict]:
         "platform": next(iter(platforms)) if len(platforms) == 1 else None,
         "excluded_editions": sorted(excluded),
         "local_only": bool(NO_CLOUD.search(text)),
+        "alias_notes": alias_notes,
     }
 
 
@@ -985,6 +991,8 @@ class SearchEngine:
                 }
             corrections = self._correct(db, tokens)
             tokens = list(dict.fromkeys(corrections.get(t, t) for t in tokens))
+            notes = {k: v for k, v in constraints.get("alias_notes", {}).items() if k in clean.lower()}
+            corrections = {**notes, **corrections}
             role = product_role(tokens, clean)
             rows = self._retrieve_candidates(db, tokens, clean, role)
             wants_astra_os = {"astra", "linux"}.issubset(tokens) and not (
