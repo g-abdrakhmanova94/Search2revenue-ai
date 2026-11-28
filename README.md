@@ -10,7 +10,9 @@
 
 [Открыть стенд](https://search2revenue.193-8-112-239.sslip.io/)
 
-Видео-презентация демонстрации: https://disk.yandex.ru/i/jWUa_bA90eeA6w
+Видео демонстрации: https://disk.yandex.ru/i/NmucwNjCVH1acQ
+
+Презентация с демонстрацией: https://disk.yandex.ru/i/jWUa_bA90eeA6w
 
 ## Запуск
 
